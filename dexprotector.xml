@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<dexprotector>
+    <verbose>false</verbose>
+    <optimize>false</optimize>
+    <signMode>release</signMode>
+    <keystore>wockee-release-key.keystore</keystore>
+    <storepass>Jlwockee#</storepass>
+    <alias>cert</alias>
+    <keypass>Jlwockee#</keypass>
+    <stripLogging>all</stripLogging>
+
+    <securityAssessment mode="on">
+        <dependencyCheck
+            mode="warning"
+            report="" />
+        <detectExposedSecrets
+            mode="warning"
+            report="" />
+        <signingCertificateWeakKey mode="error" />
+        <signingCertificateCompromised mode="error" />
+    </securityAssessment>
+
+    <stringEncryption>
+        <filters>
+            <filter>com.rtx.loginuix.mURL</filter>
+        </filters>
+    </stringEncryption>
+    <hideAccess>
+        <filters>
+            <filter>com.rtx.loginuix.mURL</filter>
+        </filters>
+    </hideAccess>
+    <classEncryption>
+        <filters>
+            <filter>com.rtx.loginuix.mURL</filter>
+        </filters>
+    </classEncryption>
+
+    <antiRoot mode="off" onDetected="ignore"/>
+    <antiEmulator mode="off" onDetected="ignore"/>
+    <antiFrida mode="off" onDetected="ignore"/>
+    <antiXposed mode="off" onDetected="ignore"/>
+    <antiHook mode="off" onDetected="ignore"/>
+    <antiScreenCapture mode="off" onDetected="ignore"/>
+    <antiVPN mode="off" onDetected="ignore"/>
+
+    <integrityControl mode="all">
+        <checkCertificate>on</checkCertificate>
+    </integrityControl>
+</dexprotector>
