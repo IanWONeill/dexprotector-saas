@@ -18,51 +18,87 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    console.log('Dashboard: Setting up auth listener')
+    let unsubscribeJobs: (() => void) | null = null
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
+      console.log('Dashboard: Auth state changed:', firebaseUser?.uid || 'no user')
+      
       if (!firebaseUser) {
+        console.log('Dashboard: No user, redirecting to login')
         router.push('/auth/login')
         return
       }
 
-      // Load user data
-      const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid))
-      if (userDoc.exists()) {
-        setUser({
-          uid: firebaseUser.uid,
-          email: firebaseUser.email,
-          displayName: firebaseUser.displayName,
-          photoURL: firebaseUser.photoURL,
-          credits: userDoc.data().credits || 0,
-          createdAt: userDoc.data().createdAt?.toDate(),
-          updatedAt: userDoc.data().updatedAt?.toDate(),
-        })
-      }
+      try {
+        console.log('Dashboard: Loading user data')
+        // Load user data
+        const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid))
+        if (userDoc.exists()) {
+          const userData = {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            displayName: firebaseUser.displayName,
+            photoURL: firebaseUser.photoURL,
+            credits: userDoc.data().credits || 0,
+            createdAt: userDoc.data().createdAt?.toDate(),
+            updatedAt: userDoc.data().updatedAt?.toDate(),
+          }
+          console.log('Dashboard: User data loaded, credits:', userData.credits)
+          setUser(userData)
+        } else {
+          console.error('Dashboard: User document not found')
+        }
 
-      // Subscribe to jobs
-      const jobsQuery = query(
-        collection(db, 'jobs'),
-        where('userId', '==', firebaseUser.uid),
-        orderBy('createdAt', 'desc')
-      )
+        // Clean up previous jobs listener if exists
+        if (unsubscribeJobs) {
+          console.log('Dashboard: Cleaning up old jobs listener')
+          unsubscribeJobs()
+        }
 
-      const unsubscribeJobs = onSnapshot(jobsQuery, (snapshot) => {
-        const jobsData = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-          createdAt: doc.data().createdAt?.toDate(),
-          startedAt: doc.data().startedAt?.toDate(),
-          completedAt: doc.data().completedAt?.toDate(),
-          failedAt: doc.data().failedAt?.toDate(),
-        })) as Job[]
-        setJobs(jobsData)
+        console.log('Dashboard: Setting up jobs listener')
+        // Subscribe to jobs
+        const jobsQuery = query(
+          collection(db, 'jobs'),
+          where('userId', '==', firebaseUser.uid),
+          orderBy('createdAt', 'desc')
+        )
+
+        unsubscribeJobs = onSnapshot(
+          jobsQuery,
+          (snapshot) => {
+            console.log('Dashboard: Jobs snapshot received:', snapshot.docs.length, 'jobs')
+            const jobsData = snapshot.docs.map((doc) => ({
+              id: doc.id,
+              ...doc.data(),
+              createdAt: doc.data().createdAt?.toDate(),
+              startedAt: doc.data().startedAt?.toDate(),
+              completedAt: doc.data().completedAt?.toDate(),
+              failedAt: doc.data().failedAt?.toDate(),
+            })) as Job[]
+            setJobs(jobsData)
+            setLoading(false)
+          },
+          (error) => {
+            console.error('Dashboard: Error loading jobs:', error)
+            toast.error('Failed to load jobs')
+            setLoading(false)
+          }
+        )
+      } catch (error) {
+        console.error('Dashboard: Error in setup:', error)
         setLoading(false)
-      })
-
-      return () => unsubscribeJobs()
+      }
     })
 
-    return () => unsubscribe()
-  }, [router])
+    return () => {
+      console.log('Dashboard: Cleaning up listeners')
+      unsubscribeAuth()
+      if (unsubscribeJobs) {
+        unsubscribeJobs()
+      }
+    }
+  }, [])
 
   const handleSignOut = async () => {
     try {

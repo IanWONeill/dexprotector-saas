@@ -13,8 +13,11 @@ service firebase.storage {
 
     function isValidAPK() {
       return request.resource.size < 120 * 1024 * 1024 && // Max 120MB
+             request.resource.size > 0 && // Must have content
              (request.resource.contentType == 'application/vnd.android.package-archive' ||
-              request.resource.contentType == 'application/octet-stream');
+              request.resource.contentType == 'application/octet-stream' ||
+              request.resource.contentType == 'application/zip' ||
+              request.resource.contentType.matches('.*apk.*'));
     }
 
     // User input files
@@ -25,8 +28,11 @@ service firebase.storage {
       // Users can read their own files
       allow read: if isOwner(userId);
 
-      // No updates or deletes
-      allow update, delete: if false;
+      // Users can delete their own input files
+      allow delete: if isOwner(userId);
+
+      // No updates
+      allow update: if false;
     }
 
     // User output files

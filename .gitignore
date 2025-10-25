@@ -63,6 +63,8 @@ desktop.ini
 
 # DexProtector sensitive files
 dexprotector.jar
+dexprotector.licel
+*.licel
 *.keystore
 *.jks
 

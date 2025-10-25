@@ -17,12 +17,19 @@ export default function SignUpPage() {
   const [loading, setLoading] = useState(false)
 
   const createUserDocument = async (uid: string, email: string) => {
-    await setDoc(doc(db, 'users', uid), {
-      email,
-      credits: 10, // Free credits for new users
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    })
+    try {
+      console.log('Creating user document for:', uid, email)
+      await setDoc(doc(db, 'users', uid), {
+        email,
+        credits: 10, // Free credits for new users
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      })
+      console.log('User document created successfully')
+    } catch (error) {
+      console.error('Error creating user document:', error)
+      throw error // Re-throw to be caught by the calling function
+    }
   }
 
   const handleEmailSignUp = async (e: React.FormEvent) => {
@@ -41,11 +48,16 @@ export default function SignUpPage() {
     setLoading(true)
 
     try {
+      console.log('Creating user with email:', email)
       const userCredential = await createUserWithEmailAndPassword(auth, email, password)
+      console.log('User created in Auth, UID:', userCredential.user.uid)
+      
       await createUserDocument(userCredential.user.uid, email)
+      
       toast.success('Account created successfully!')
       router.push('/dashboard')
     } catch (error: any) {
+      console.error('Signup error:', error)
       toast.error(error.message || 'Failed to create account')
     } finally {
       setLoading(false)
@@ -57,7 +69,10 @@ export default function SignUpPage() {
     const provider = new GoogleAuthProvider()
 
     try {
+      console.log('Starting Google sign-in')
       const result = await signInWithPopup(auth, provider)
+      console.log('Google sign-in successful, UID:', result.user.uid)
+      
       await createUserDocument(result.user.uid, result.user.email || '')
       toast.success('Account created successfully!')
       router.push('/dashboard')

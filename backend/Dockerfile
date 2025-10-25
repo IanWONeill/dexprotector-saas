@@ -14,8 +14,9 @@ RUN apt-get update && apt-get install -y \
 # Create app directory
 WORKDIR /app
 
-# Copy DexProtector jar (will be provided by user)
+# Copy DexProtector jar and license file (will be provided by user)
 COPY dexprotector.jar /app/dexprotector.jar
+COPY dexprotector.licel /app/dexprotector.licel
 
 # Install Node.js 18.x
 RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \

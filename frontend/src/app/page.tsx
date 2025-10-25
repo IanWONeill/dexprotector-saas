@@ -21,7 +21,7 @@ export default function Home() {
     })
 
     return () => unsubscribe()
-  }, [router])
+  }, [])
 
   if (loading) {
     return (

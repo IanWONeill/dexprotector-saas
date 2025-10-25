@@ -21,12 +21,23 @@ service cloud.firestore {
       // Users can read their own document
       allow read: if isOwner(userId);
 
-      // Users can update their own document (except credits)
-      allow update: if isOwner(userId) &&
-                      !request.resource.data.diff(resource.data).affectedKeys().hasAny(['credits']);
+      // Users can create their own document during signup (with initial credits only)
+      allow create: if isOwner(userId) &&
+                      request.resource.data.credits == 10 &&
+                      request.resource.data.email is string;
 
-      // Only system can create/delete users
-      allow create, delete: if false;
+      // Users can update their own document
+      // Allow non-credit updates OR credit decrements (using increment)
+      allow update: if isOwner(userId) &&
+                      (
+                        // Allow updates that don't touch credits
+                        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['credits'])) ||
+                        // OR allow credit decrements (new value must be less than old value)
+                        (request.resource.data.credits < resource.data.credits)
+                      );
+
+      // Only system can delete users
+      allow delete: if false;
     }
 
     // Jobs collection
@@ -39,8 +50,15 @@ service cloud.firestore {
                       request.resource.data.userId == request.auth.uid &&
                       request.resource.data.status == 'pending';
 
-      // Only system can update/delete jobs
-      allow update, delete: if false;
+      // Users can update their own jobs (only inputFile and configXml fields during upload)
+      allow update: if isAuthenticated() && 
+                      resource.data.userId == request.auth.uid &&
+                      request.resource.data.userId == resource.data.userId &&
+                      request.resource.data.status == resource.data.status &&
+                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['inputFile', 'configXml']);
+
+      // Only system can delete jobs
+      allow delete: if false;
     }
 
     // Transactions collection
