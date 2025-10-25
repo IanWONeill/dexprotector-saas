@@ -4,6 +4,13 @@ const { processAPK } = require('./services/processor');
 const { Storage } = require('@google-cloud/storage');
 const { Firestore } = require('@google-cloud/firestore');
 
+// Startup logging
+console.log('=== DexProtector Processor Starting ===');
+console.log('Node version:', process.version);
+console.log('Environment:', process.env.NODE_ENV || 'development');
+console.log('PORT from env:', process.env.PORT);
+console.log('========================================');
+
 const app = express();
 const PORT = process.env.PORT || 8080;
 
@@ -73,7 +80,7 @@ app.post('/process', async (req, res) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`DexProtector Processor running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`Fake time enabled: ${process.env.FAKETIME || 'not set'}`);

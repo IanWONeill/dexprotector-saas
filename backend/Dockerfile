@@ -17,10 +17,14 @@ WORKDIR /app
 # Copy DexProtector jar (will be provided by user)
 COPY dexprotector.jar /app/dexprotector.jar
 
+# Install Node.js 18.x
+RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
+    apt-get install -y nodejs && \
+    rm -rf /var/lib/apt/lists/*
+
 # Copy Node.js processing server
 COPY package*.json ./
-RUN apt-get update && apt-get install -y nodejs npm && rm -rf /var/lib/apt/lists/*
-RUN npm ci --only=production
+RUN npm install --only=production
 
 # Copy application code
 COPY src/ ./src/
@@ -33,12 +37,11 @@ ENV FAKETIME_NO_CACHE=1
 # Create temp directories
 RUN mkdir -p /tmp/uploads /tmp/outputs
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8080/health || exit 1
+# Verify Java and dependencies are installed
+RUN java -version && node --version && npm --version
 
 # Expose port for Cloud Run
 EXPOSE 8080
 
-# Run the processing server
+# Run the processing server with verbose logging
 CMD ["node", "src/index.js"]
