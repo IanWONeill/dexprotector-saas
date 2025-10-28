@@ -305,30 +305,33 @@ exports.getTransactions = functions.https.onCall(async (data, context) => {
 });
 
 /**
- * Firestore Trigger: Process APK when job is created with inputFile
- * Optimized to trigger only on document creation, not updates
- * This reduces function invocations and costs
+ * Firestore Trigger: Process APK when job is updated with inputFile
+ * Triggers when inputFile is added to a pending job
  */
 exports.processJob = functions.firestore
     .document('jobs/{jobId}')
-    .onCreate(async (snapshot, context) => {
+    .onUpdate(async (change, context) => {
         const jobId = context.params.jobId;
-        const jobData = snapshot.data();
+        const beforeData = change.before.data();
+        const afterData = change.after.data();
 
-        // Only process if inputFile is present and status is pending
-        if (!jobData.inputFile || jobData.status !== 'pending') {
-            log('debug', 'Job created but not ready for processing', {
+        // Only trigger if inputFile was just added and status is still pending
+        if (!beforeData.inputFile && afterData.inputFile && afterData.status === 'pending') {
+            log('info', 'Job updated with inputFile, triggering backend processing', { jobId });
+        } else {
+            log('debug', 'Job updated but not triggering', {
                 jobId,
-                hasInputFile: !!jobData.inputFile,
-                status: jobData.status,
+                hadInputFile: !!beforeData.inputFile,
+                hasInputFile: !!afterData.inputFile,
+                status: afterData.status,
             });
             return null;
         }
 
         log('info', 'Job ready for processing', {
             jobId,
-            userId: jobData.userId,
-            tier: jobData.configTier,
+            userId: afterData.userId,
+            tier: afterData.configTier,
         });
 
         // Call the backend processing service
@@ -343,9 +346,9 @@ exports.processJob = functions.firestore
                 },
                 body: JSON.stringify({
                     jobId: jobId,
-                    userId: jobData.userId,
-                    inputFile: jobData.inputFile,
-                    configXml: jobData.configXml,
+                    userId: afterData.userId,
+                    inputFile: afterData.inputFile,
+                    configXml: afterData.configXml,
                 }),
                 timeout: 5000, // 5 second timeout for request initiation
             });
@@ -361,7 +364,7 @@ exports.processJob = functions.firestore
                 });
 
                 // Update job status to failed
-                await snapshot.ref.update({
+                await change.after.ref.update({
                     status: 'failed',
                     failedAt: admin.firestore.FieldValue.serverTimestamp(),
                     error: 'Failed to initiate processing',
@@ -376,7 +379,7 @@ exports.processJob = functions.firestore
 
             // Update job status to failed
             try {
-                await snapshot.ref.update({
+                await change.after.ref.update({
                     status: 'failed',
                     failedAt: admin.firestore.FieldValue.serverTimestamp(),
                     error: 'Failed to connect to processing service',
