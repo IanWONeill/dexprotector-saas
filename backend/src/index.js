@@ -2,62 +2,71 @@ const express = require('express');
 const cors = require('cors');
 const { processAPK } = require('./services/processor');
 const { validateTierCredits, getConfigForTier } = require('./utils/configGenerator');
+const { validateProcessRequest, sanitizeErrorMessage } = require('./utils/validation');
+const { Logger } = require('./utils/logger');
 const { Storage } = require('@google-cloud/storage');
 const admin = require('firebase-admin');
 
+// Initialize logger
+const logger = new Logger('api-server');
+
 // Startup logging
-console.log('=== DexProtector Processor Starting ===');
-console.log('Node version:', process.version);
-console.log('Environment:', process.env.NODE_ENV || 'development');
-console.log('PORT from env:', process.env.PORT);
-console.log('========================================');
+logger.info('DexProtector Processor Starting', {
+    nodeVersion: process.version,
+    environment: process.env.NODE_ENV || 'development',
+    port: process.env.PORT,
+});
 
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// Initialize Google Cloud clients with explicit project ID
+// Initialize Google Cloud clients
 const PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT || 'dexprotector-saas-ian';
-console.log('Initializing with project:', PROJECT_ID);
+logger.info('Initializing cloud clients', { projectId: PROJECT_ID });
 
 const storage = new Storage({ projectId: PROJECT_ID });
 
-// Initialize Firebase Admin SDK (bypasses Firestore security rules)
-admin.initializeApp({
-    projectId: PROJECT_ID,
-    // In Cloud Run, credentials are automatically detected via Application Default Credentials
-});
+// Initialize Firebase Admin SDK
+admin.initializeApp({ projectId: PROJECT_ID });
 
-// Get Firestore with explicit settings
 const firestore = admin.firestore();
-firestore.settings({
-    ignoreUndefinedProperties: true,
-});
+firestore.settings({ ignoreUndefinedProperties: true });
 
 // Test Firestore connectivity on startup
 (async () => {
     try {
-        console.log('Testing Firestore connectivity...');
+        logger.info('Testing Firestore connectivity...');
         const testPromise = firestore.collection('_test').doc('connection').get();
         const timeoutPromise = new Promise((_, reject) =>
             setTimeout(() => reject(new Error('Connection test timeout')), 5000)
         );
 
         await Promise.race([testPromise, timeoutPromise]);
-        console.log('✓ Firestore connection successful (using Firebase Admin SDK)');
+        logger.info('Firestore connection successful');
     } catch (error) {
-        console.error('✗ Firestore connection failed:', error.message);
-        console.error('  Stack:', error.stack);
-        console.error('  This will cause issues with job processing!');
+        logger.error('Firestore connection failed', {
+            error: error.message,
+            stack: error.stack,
+        });
     }
 })();
 
-// Helper function to add timeout to async operations
+/**
+ * Add timeout to async operations
+ * @param {Promise} promise - Promise to race
+ * @param {number} timeoutMs - Timeout in milliseconds
+ * @param {string} operation - Operation name for error message
+ * @returns {Promise}
+ */
 function withTimeout(promise, timeoutMs, operation) {
     return Promise.race([
         promise,
         new Promise((_, reject) =>
-            setTimeout(() => reject(new Error(`${operation} timed out after ${timeoutMs}ms`)), timeoutMs)
-        )
+            setTimeout(
+                () => reject(new Error(`${operation} timed out after ${timeoutMs}ms`)),
+                timeoutMs
+            )
+        ),
     ]);
 }
 
@@ -65,25 +74,60 @@ function withTimeout(promise, timeoutMs, operation) {
 app.use(cors());
 app.use(express.json());
 
+// Request logging middleware
+app.use((req, res, next) => {
+    const startTime = Date.now();
+
+    // Log request
+    logger.info('Incoming request', {
+        method: req.method,
+        path: req.path,
+        ip: req.ip,
+    });
+
+    // Log response
+    res.on('finish', () => {
+        const duration = Date.now() - startTime;
+        logger.info('Request completed', {
+            method: req.method,
+            path: req.path,
+            status: res.statusCode,
+            duration,
+        });
+    });
+
+    next();
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
+    res.status(200).json({
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        version: process.env.npm_package_version || '1.0.0',
+    });
 });
 
 // Main processing endpoint
 app.post('/process', async (req, res) => {
     const { jobId, userId, inputFile, configXml } = req.body;
+    const jobLogger = logger.forJob(jobId);
 
-    if (!jobId || !userId || !inputFile) {
-        return res.status(400).json({ error: 'Missing required parameters' });
+    // Validate request
+    const validation = validateProcessRequest(req.body);
+    if (!validation.valid) {
+        jobLogger.warn('Invalid request', { error: validation.error });
+        return res.status(400).json({ error: validation.error });
     }
 
-    console.log(`[${jobId}] Starting processing for user ${userId}`);
-    console.log(`[${jobId}] Input file: ${inputFile}`);
+    jobLogger.info('Processing request received', {
+        userId,
+        inputFile,
+    });
 
     try {
-        // Fetch job document to get tier and credits
-        console.log(`[${jobId}] Fetching job document...`);
+        // Fetch job document
+        jobLogger.debug('Fetching job document');
         const jobDoc = await withTimeout(
             firestore.collection('jobs').doc(jobId).get(),
             10000,
@@ -101,31 +145,37 @@ app.post('/process', async (req, res) => {
             throw new Error('Job missing configTier');
         }
 
-        console.log(`[${jobId}] Tier: ${configTier}, Credits: ${creditsUsed}`);
+        jobLogger.info('Job metadata retrieved', {
+            tier: configTier,
+            credits: creditsUsed,
+        });
 
-        // Validate credits match tier (prevent client manipulation)
+        // Validate credits match tier (security check)
         validateTierCredits(configTier, creditsUsed);
-        console.log(`[${jobId}] Tier/credits validation passed`);
+        jobLogger.debug('Tier/credits validation passed');
 
-        // Get validated config (regenerate for presets, use provided for custom)
+        // Get validated config
         const validatedConfigXml = getConfigForTier(configTier, configXml);
-        console.log(`[${jobId}] Configuration validated for tier: ${configTier}`);
+        jobLogger.debug('Configuration validated', { tier: configTier });
 
-        // Update job status to processing with timeout
-        console.log(`[${jobId}] Updating status to processing...`);
-
+        // Update job status to processing
+        jobLogger.debug('Updating status to processing');
+        const processingBatch = firestore.batch();
+        processingBatch.update(firestore.collection('jobs').doc(jobId), {
+            status: 'processing',
+            startedAt: admin.firestore.FieldValue.serverTimestamp(),
+            // Clear any previous error from failed attempts
+            error: null,
+            failedAt: null,
+        });
         await withTimeout(
-            firestore.collection('jobs').doc(jobId).update({
-                status: 'processing',
-                startedAt: admin.firestore.FieldValue.serverTimestamp(),
-            }),
+            processingBatch.commit(),
             10000,
-            'Firestore update to processing'
+            'Firestore processing status batch'
         );
-        console.log(`[${jobId}] Status updated to processing`);
 
-        // Process the APK with validated config
-        console.log(`[${jobId}] Starting APK processing...`);
+        // Process the APK
+        jobLogger.info('Starting APK processing');
         const result = await processAPK({
             jobId,
             userId,
@@ -133,53 +183,111 @@ app.post('/process', async (req, res) => {
             configXml: validatedConfigXml,
             storage,
             firestore,
+            logger: jobLogger,
         });
-        console.log(`[${jobId}] APK processing completed`);
 
-        // Update job status to completed with timeout
-        console.log(`[${jobId}] Updating status to completed...`);
+        // Update job status to completed
+        jobLogger.debug('Updating status to completed');
+        const completionBatch = firestore.batch();
+        completionBatch.update(firestore.collection('jobs').doc(jobId), {
+            status: 'completed',
+            completedAt: admin.firestore.FieldValue.serverTimestamp(),
+            outputFile: result.outputFile,
+            processingTime: result.processingTime,
+        });
         await withTimeout(
-            firestore.collection('jobs').doc(jobId).update({
-                status: 'completed',
-                completedAt: admin.firestore.FieldValue.serverTimestamp(),
-                outputFile: result.outputFile,
-                processingTime: result.processingTime,
-            }),
+            completionBatch.commit(),
             10000,
-            'Firestore update to completed'
+            'Firestore completion batch'
         );
 
-        console.log(`[${jobId}] Processing completed successfully`);
-        res.status(200).json({ success: true, outputFile: result.outputFile });
+        jobLogger.info('Processing completed successfully', {
+            outputFile: result.outputFile,
+            processingTime: result.processingTime,
+        });
+
+        res.status(200).json({
+            success: true,
+            outputFile: result.outputFile,
+            processingTime: result.processingTime,
+        });
     } catch (error) {
-        console.error(`[${jobId}] Processing failed:`, error);
-        console.error(`[${jobId}] Error stack:`, error.stack);
+        jobLogger.error('Processing failed', {
+            error: error.message,
+            stack: error.stack,
+        });
 
         // Update job status to failed
         try {
-            await firestore.collection('jobs').doc(jobId).update({
+            const failureBatch = firestore.batch();
+            failureBatch.update(firestore.collection('jobs').doc(jobId), {
                 status: 'failed',
                 failedAt: admin.firestore.FieldValue.serverTimestamp(),
                 error: error.message,
             });
-            console.log(`[${jobId}] Status updated to failed`);
+            await failureBatch.commit();
+            jobLogger.debug('Status updated to failed');
         } catch (updateError) {
-            console.error(`[${jobId}] Failed to update status to failed:`, updateError);
+            jobLogger.error('Failed to update status', {
+                error: updateError.message,
+            });
         }
 
-        res.status(500).json({ error: error.message });
+        // Send sanitized error to client
+        const sanitizedError = sanitizeErrorMessage(error);
+        res.status(500).json({ error: sanitizedError });
     }
+});
+
+// 404 handler
+app.use((req, res) => {
+    res.status(404).json({ error: 'Not found' });
+});
+
+// Error handler
+app.use((err, req, res, next) => {
+    logger.error('Unhandled error', {
+        error: err.message,
+        stack: err.stack,
+        path: req.path,
+    });
+
+    res.status(500).json({ error: 'Internal server error' });
 });
 
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`DexProtector Processor running on port ${PORT}`);
-    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`Fake time enabled: ${process.env.FAKETIME || 'not set'}`);
+    logger.info('Server started', {
+        port: PORT,
+        environment: process.env.NODE_ENV || 'development',
+    });
 });
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
-    console.log('SIGTERM signal received: closing HTTP server');
+    logger.info('SIGTERM received, shutting down gracefully');
     process.exit(0);
+});
+
+process.on('SIGINT', () => {
+    logger.info('SIGINT received, shutting down gracefully');
+    process.exit(0);
+});
+
+// Uncaught exception handler
+process.on('uncaughtException', (error) => {
+    logger.error('Uncaught exception', {
+        error: error.message,
+        stack: error.stack,
+    });
+    process.exit(1);
+});
+
+// Unhandled rejection handler
+process.on('unhandledRejection', (reason, promise) => {
+    logger.error('Unhandled rejection', {
+        reason: reason instanceof Error ? reason.message : reason,
+        stack: reason instanceof Error ? reason.stack : undefined,
+    });
+    process.exit(1);
 });
