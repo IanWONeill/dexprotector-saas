@@ -1,168 +1,195 @@
 export interface User {
-  uid: string
-  email: string | null
-  displayName: string | null
-  photoURL: string | null
-  credits: number
-  createdAt: Date
-  updatedAt: Date
+    uid: string
+    email: string | null
+    displayName: string | null
+    photoURL: string | null
+    credits: number
+    isAdmin?: boolean
+    createdAt: Date
+    updatedAt: Date
 }
 
 export interface Job {
-  id: string
-  userId: string
-  status: 'pending' | 'processing' | 'completed' | 'failed'
-  inputFile: string
-  outputFile?: string
-  configXml?: string
-  config?: ProtectionConfig
-  error?: string
-  createdAt: Date
-  startedAt?: Date
-  completedAt?: Date
-  failedAt?: Date
-  processingTime?: number
+    id: string
+    userId: string
+    status: 'pending' | 'processing' | 'completed' | 'failed'
+    inputFile: string
+    outputFile?: string
+    configXml?: string
+    config?: DexProtectorConfig
+    configTier?: ConfigTier
+    creditsUsed?: number
+    error?: string
+    createdAt: Date
+    startedAt?: Date
+    completedAt?: Date
+    failedAt?: Date
+    processingTime?: number
 }
 
-export interface ProtectionConfig {
-  // Basic Protection
-  stringEncryption: boolean
-  annotationEncryption: boolean
-  classEncryption: boolean
-  hideAccess: boolean
+export type ConfigTier = 'basic' | 'standard' | 'enhanced' | 'custom'
 
-  // Advanced Protection
-  jniObfuscation: boolean
-  nativeLibraryEncryption: boolean
+export interface DexProtectorConfig {
+    // Build & Logging
+    verbose?: boolean
+    proguardMapFile?: string
+    optimize?: boolean
 
-  // Resource Protection
-  resourceEncryption: {
+    // Signing
+    signMode?: 'debug' | 'release' | 'google' | 'amazon' | 'none'
+    keystore?: string
+    storepass?: string
+    alias?: string
+    keypass?: string
+    sha256CertificateFingerprint?: string
+    certificate?: string
+    legacySha256CertificateFingerprint?: string
+
+    // Code Stripping
+    stripLogging?: ConfigOption
+    stripMethodCalls?: ConfigOption
+
+    // Code Protection
+    classEncryption?: ConfigOption
+    stringEncryption?: ConfigOption
+    hideAccess?: ConfigOption
+    annotationEncryption?: ConfigOption
+    jniObfuscation?: boolean
+    nativeLibraryEncryption?: ConfigOption
+
+    // Resource & Asset Protection
+    resourceEncryption?: ResourceEncryptionOption
+    assets?: ConfigOption
+
+    // RASP (Runtime Application Self-Protection)
+    integrityControl?: RaspOption
+    environmentChecks?: EnvironmentChecks
+    antiDebug?: boolean
+    antiEmulator?: boolean
+    antiManualInstall?: boolean
+    antiMalware?: boolean
+    runtimeChecks?: boolean
+
+    // Network Security
+    publicKeyPinning?: PublicKeyPinning
+    certificateTransparency?: CertificateTransparency
+
+    // UI Protection
+    uiProtection?: boolean
+
+    // Threat Reporting (Alice)
+    reportMonitoring?: ReportMonitoring
+
+    // Security Assessment
+    securityAssessment?: SecurityAssessment
+}
+
+export interface ConfigOption {
     enabled: boolean
-    assets: boolean
-    res: boolean
-    strings: boolean
-    nameObfuscation: boolean
-  }
+    filters?: Filter[]
+}
 
-  // RASP Features
-  antiDebug: 'off' | 'report' | 'exit'
-  antiEmulator: 'off' | 'report' | 'exit'
-  antiManualInstall: 'off' | 'report' | 'exit'
-  antiMalware: 'off' | 'report'
-  runtimeChecks: 'off' | 'report' | 'exit'
+export interface ResourceEncryptionOption {
+    enabled: boolean
+    nameObfuscation?: boolean
+    webViewSupport?: boolean
+    idObfuscationMode?: 'auto' | 'on' | 'off'
+    filters?: Filter[]
+    androidManifestMangling?: boolean
+    xamarinAssemblies?: boolean
+}
 
-  // Build Settings
-  verbose: boolean
-  optimize: boolean
+export interface PublicKeyPinning {
+    enabled: boolean
+    trace?: number
+    actions?: string
+    domains?: Array<{
+        domain: string
+        includeSubdomains: boolean
+        pins: Array<{
+            digest: string
+            hash: string
+        }>
+        expiration?: string
+    }>
+}
 
-  // Filters
-  includePackages: string[]
-  excludePackages: string[]
+export interface CertificateTransparency {
+    enabled: boolean
+    trace?: number
+    domains?: Array<{
+        domain: string
+        includeSubdomains: boolean
+    }>
+    logFile?: string
+}
+
+export interface ReportMonitoring {
+    enabled: boolean
+    apiKey?: string
+    trace?: number
+    customFieldsUpdate?: string
+}
+
+export interface RaspOption {
+    enabled: boolean
+    callback?: string
+}
+
+export interface EnvironmentChecks {
+    enabled: boolean
+    callback?: string
+    debug?: boolean
+    root?: boolean
+    emulator?: boolean
+    hooks?: boolean
+}
+
+export interface SecurityAssessment {
+    signingCertificateCompromised?: 'error' | 'warning' | 'off'
+    signingCertificateWeakKey?: 'error' | 'warning' | 'off'
+    dependencyCheck?: 'error' | 'warning' | 'off'
+}
+
+export interface Filter {
+    pattern: string
+    type: 'include' | 'exclude'
 }
 
 export interface Transaction {
-  id: string
-  userId: string
-  type: 'purchase' | 'deduction' | 'refund'
-  amount: number
-  credits: number
-  description: string
-  stripePaymentId?: string
-  createdAt: Date
+    id: string
+    userId: string
+    type: 'purchase' | 'deduction' | 'refund'
+    amount: number
+    credits: number
+    description: string
+    stripePaymentId?: string
+    createdAt: Date
 }
 
 export interface CreditPackage {
-  id: string
-  name: string
-  credits: number
-  price: number
-  pricePerCredit: number
-  stripePriceId: string
-  popular?: boolean
+    id: string
+    name: string
+    credits: number
+    price: number
+    pricePerCredit: number
+    stripePriceId: string
+    popular?: boolean
 }
 
 export interface APKInfo {
-  packageName: string
-  versionName: string
-  versionCode: number
-  minSdkVersion: number
-  targetSdkVersion: number
-  classes: APKClass[]
-  size: number
+    packageName: string
+    versionName: string
+    versionCode: number
+    minSdkVersion: number
+    targetSdkVersion: number
+    classes: APKClass[]
+    size: number
 }
 
 export interface APKClass {
-  name: string
-  package: string
-  methods: number
+    name: string
+    package: string
+    methods: number
 }
 
-export const DEFAULT_CONFIG: ProtectionConfig = {
-  stringEncryption: true,
-  annotationEncryption: true,
-  classEncryption: false,
-  hideAccess: true,
-  jniObfuscation: false,
-  nativeLibraryEncryption: false,
-  resourceEncryption: {
-    enabled: true,
-    assets: true,
-    res: false,
-    strings: true,
-    nameObfuscation: false,
-  },
-  antiDebug: 'report',
-  antiEmulator: 'report',
-  antiManualInstall: 'report',
-  antiMalware: 'report',
-  runtimeChecks: 'report',
-  verbose: true,
-  optimize: true,
-  includePackages: [],
-  excludePackages: [],
-}
-
-export const PRESET_CONFIGS = {
-  basic: {
-    name: 'Basic Protection',
-    description: 'Essential protection for most apps',
-    config: DEFAULT_CONFIG,
-  },
-  standard: {
-    name: 'Standard Protection',
-    description: 'Recommended for production apps',
-    config: {
-      ...DEFAULT_CONFIG,
-      classEncryption: true,
-      nativeLibraryEncryption: true,
-      resourceEncryption: {
-        enabled: true,
-        assets: true,
-        res: true,
-        strings: true,
-        nameObfuscation: true,
-      },
-    } as ProtectionConfig,
-  },
-  maximum: {
-    name: 'Maximum Protection',
-    description: 'Maximum security for sensitive apps',
-    config: {
-      ...DEFAULT_CONFIG,
-      classEncryption: true,
-      jniObfuscation: true,
-      nativeLibraryEncryption: true,
-      resourceEncryption: {
-        enabled: true,
-        assets: true,
-        res: true,
-        strings: true,
-        nameObfuscation: true,
-      },
-      antiDebug: 'exit',
-      antiEmulator: 'exit',
-      antiManualInstall: 'exit',
-      runtimeChecks: 'exit',
-    } as ProtectionConfig,
-  },
-}

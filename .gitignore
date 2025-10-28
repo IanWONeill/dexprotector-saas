@@ -30,6 +30,7 @@ protected_*.apk
 firebase-debug.log
 firestore-debug.log
 ui-debug.log
+firebase-admin-key.json
 
 # Vercel
 .vercel

@@ -30,10 +30,8 @@ RUN npm install --only=production
 # Copy application code
 COPY src/ ./src/
 
-# Set environment variables for libfaketime
-ENV LD_PRELOAD=/usr/lib/x86_64-linux-gnu/faketime/libfaketime.so.1
-ENV FAKETIME="2025-02-01 00:00:00"
-ENV FAKETIME_NO_CACHE=1
+# DO NOT set LD_PRELOAD globally - it breaks Node.js networking!
+# Instead, we'll use faketime only when calling Java commands
 
 # Create temp directories
 RUN mkdir -p /tmp/uploads /tmp/outputs
@@ -44,5 +42,6 @@ RUN java -version && node --version && npm --version
 # Expose port for Cloud Run
 EXPOSE 8080
 
-# Run the processing server with verbose logging
+# Run the processing server WITHOUT faketime
+# (faketime will be applied only to Java subprocess in processor.js)
 CMD ["node", "src/index.js"]

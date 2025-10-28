@@ -1,84 +1,113 @@
 rules_version = '2';
 service cloud.firestore {
-  match /databases/{database}/documents {
+    match /databases/{database}/documents {
 
-    // Helper functions
-    function isAuthenticated() {
-      return request.auth != null;
+        // Helper functions
+        function isAuthenticated() {
+            return request.auth != null;
+        }
+
+        function isOwner(userId) {
+            return isAuthenticated() && request.auth.uid == userId;
+        }
+
+        function isAdmin() {
+            return isAuthenticated() &&
+                exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+        }
+
+        // Users collection
+        match /users/{userId} {
+            // Users can read their own document, admins can read all
+            allow read: if isOwner(userId) || isAdmin();
+
+            // Users can create their own document during signup (with initial credits only)
+            allow create: if isOwner(userId) &&
+                request.resource.data.credits == 5 &&
+                request.resource.data.email is string;
+
+            // Users can update their own document
+            // Allow non-credit updates OR credit decrements (using increment)
+            // Admins can update any user
+            allow update: if isAdmin() ||
+                (isOwner(userId) &&
+                (
+                    // Allow updates that don't touch credits
+                    (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['credits'])) ||
+                    // OR allow credit decrements (new value must be less than old value)
+                    (request.resource.data.credits < resource.data.credits)
+                ));
+
+            // Admins can delete users
+            allow delete: if isAdmin();
+        }
+
+        // Jobs collection
+        match /jobs/{jobId} {
+            // Helper to validate tier credits
+            function validTierCredits(tier, credits) {
+                return (tier == 'basic' && credits == 1) ||
+                       (tier == 'standard' && credits == 2) ||
+                       (tier == 'enhanced' && credits == 3) ||
+                       (tier == 'custom' && credits == 5);
+            }
+
+            // Users can read their own jobs, admins can read all
+            allow read: if (isAuthenticated() && resource.data.userId == request.auth.uid) || isAdmin();
+
+            // Users can create jobs with required fields and valid tier/credits
+            allow create: if isAuthenticated() &&
+                request.resource.data.userId == request.auth.uid &&
+                request.resource.data.status == 'pending' &&
+                request.resource.data.keys().hasAll(['userId', 'status', 'inputFile', 'createdAt']) &&
+                request.resource.data.inputFile is string &&
+                request.resource.data.createdAt is timestamp &&
+                // Validate tier matches credits (prevent manipulation)
+                request.resource.data.configTier is string &&
+                request.resource.data.creditsUsed is int &&
+                validTierCredits(request.resource.data.configTier, request.resource.data.creditsUsed);
+
+            // Users can update their own jobs (only inputFile and configXml fields during upload)
+            // Backend service (unauthenticated) can update job status and processing fields
+            // Admins can update any job
+            allow update: if isAdmin() || (
+                // User updating their own job (only inputFile and configXml)
+                (isAuthenticated() &&
+                 resource.data.userId == request.auth.uid &&
+                 request.resource.data.userId == resource.data.userId &&
+                 request.resource.data.status == resource.data.status &&
+                 request.resource.data.diff(resource.data).affectedKeys().hasOnly(['inputFile', 'configXml']))
+                ||
+                // Backend service updating job (any fields)
+                (!isAuthenticated())
+            );
+
+            // Admins can delete jobs
+            allow delete: if isAdmin();
+        }
+
+        // Transactions collection
+        match /transactions/{transactionId} {
+            // Users can read their own transactions, admins can read all
+            allow read: if (isAuthenticated() && resource.data.userId == request.auth.uid) || isAdmin();
+
+            // Users can create transactions for themselves during job processing
+            // Backend can also create transactions
+            allow create: if (isAuthenticated() && request.resource.data.userId == request.auth.uid) || !isAuthenticated();
+            
+            // Only backend can update/delete
+            allow update, delete: if !isAuthenticated() || isAdmin();
+        }
+
+        // Admin collection
+        match /admins/{userId} {
+            allow read: if isAuthenticated();
+            allow write: if false;
+        }
+
+        // Default deny all
+        match /{document=**} {
+            allow read, write: if false;
+        }
     }
-
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
-
-    function isAdmin() {
-      return isAuthenticated() &&
-             exists(/databases/$(database)/documents/admins/$(request.auth.uid));
-    }
-
-    // Users collection
-    match /users/{userId} {
-      // Users can read their own document
-      allow read: if isOwner(userId);
-
-      // Users can create their own document during signup (with initial credits only)
-      allow create: if isOwner(userId) &&
-                      request.resource.data.credits == 10 &&
-                      request.resource.data.email is string;
-
-      // Users can update their own document
-      // Allow non-credit updates OR credit decrements (using increment)
-      allow update: if isOwner(userId) &&
-                      (
-                        // Allow updates that don't touch credits
-                        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['credits'])) ||
-                        // OR allow credit decrements (new value must be less than old value)
-                        (request.resource.data.credits < resource.data.credits)
-                      );
-
-      // Only system can delete users
-      allow delete: if false;
-    }
-
-    // Jobs collection
-    match /jobs/{jobId} {
-      // Users can read their own jobs
-      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
-
-      // Users can create jobs
-      allow create: if isAuthenticated() &&
-                      request.resource.data.userId == request.auth.uid &&
-                      request.resource.data.status == 'pending';
-
-      // Users can update their own jobs (only inputFile and configXml fields during upload)
-      allow update: if isAuthenticated() && 
-                      resource.data.userId == request.auth.uid &&
-                      request.resource.data.userId == resource.data.userId &&
-                      request.resource.data.status == resource.data.status &&
-                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['inputFile', 'configXml']);
-
-      // Only system can delete jobs
-      allow delete: if false;
-    }
-
-    // Transactions collection
-    match /transactions/{transactionId} {
-      // Users can read their own transactions
-      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
-
-      // Only system can create transactions
-      allow create, update, delete: if false;
-    }
-
-    // Admin collection
-    match /admins/{userId} {
-      allow read: if isAuthenticated();
-      allow write: if false;
-    }
-
-    // Default deny all
-    match /{document=**} {
-      allow read, write: if false;
-    }
-  }
 }

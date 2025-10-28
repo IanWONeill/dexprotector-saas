@@ -6,7 +6,7 @@ const { v4: uuidv4 } = require('uuid');
 
 const execAsync = promisify(exec);
 
-const BUCKET_NAME = process.env.GCS_BUCKET_NAME || 'dexprotector-saas-files';
+const BUCKET_NAME = process.env.GCS_BUCKET_NAME || 'dexprotector-saas-ian.firebasestorage.app';
 const DEXPROTECTOR_JAR = '/app/dexprotector.jar';
 
 /**
@@ -20,103 +20,105 @@ const DEXPROTECTOR_JAR = '/app/dexprotector.jar';
  * @param {Object} params.firestore - Firestore client
  */
 async function processAPK({ jobId, userId, inputFile, configXml, storage, firestore }) {
-  const startTime = Date.now();
-  const workDir = `/tmp/${jobId}`;
+    const startTime = Date.now();
+    const workDir = `/tmp/${jobId}`;
 
-  try {
-    // Create working directory
-    await fs.mkdir(workDir, { recursive: true });
-    console.log(`[${jobId}] Created working directory: ${workDir}`);
-
-    // Download input APK from GCS
-    const inputPath = path.join(workDir, 'input.apk');
-    await downloadFromGCS(storage, inputFile, inputPath);
-    console.log(`[${jobId}] Downloaded input APK`);
-
-    // Create configuration XML file
-    const configPath = path.join(workDir, 'dexprotector.xml');
-    await fs.writeFile(configPath, configXml || getDefaultConfig());
-    console.log(`[${jobId}] Created configuration file`);
-
-    // Run DexProtector
-    const outputPath = path.join(workDir, 'output.apk');
-    console.log(`[${jobId}] Starting DexProtector...`);
-
-    const command = `java -jar ${DEXPROTECTOR_JAR} -configFile ${configPath} ${inputPath} ${outputPath}`;
-    console.log(`[${jobId}] Command: ${command}`);
-
-    const { stdout, stderr } = await execAsync(command, {
-      cwd: workDir,
-      maxBuffer: 1024 * 1024 * 10, // 10MB buffer
-    });
-
-    if (stdout) console.log(`[${jobId}] DexProtector stdout:`, stdout);
-    if (stderr) console.log(`[${jobId}] DexProtector stderr:`, stderr);
-
-    // Verify output file exists
     try {
-      await fs.access(outputPath);
+        // Create working directory
+        await fs.mkdir(workDir, { recursive: true });
+        console.log(`[${jobId}] Created working directory: ${workDir}`);
+
+        // Download input APK from GCS
+        const inputPath = path.join(workDir, 'input.apk');
+        await downloadFromGCS(storage, inputFile, inputPath);
+        console.log(`[${jobId}] Downloaded input APK`);
+
+        // Create configuration XML file
+        const configPath = path.join(workDir, 'dexprotector.xml');
+        await fs.writeFile(configPath, configXml || getDefaultConfig());
+        console.log(`[${jobId}] Created configuration file`);
+
+        // Run DexProtector with faketime (only for this Java process)
+        const outputPath = path.join(workDir, 'output.apk');
+        console.log(`[${jobId}] Starting DexProtector...`);
+
+        // Use faketime wrapper to set date to Feb 1, 2025 for DexProtector license
+        // Allocate 1.5GB heap for Java to prevent OutOfMemoryError
+        const command = `faketime '2025-02-01 00:00:00' java -Xmx1536m -jar ${DEXPROTECTOR_JAR} -configFile ${configPath} ${inputPath} ${outputPath}`;
+        console.log(`[${jobId}] Command: ${command}`);
+
+        const { stdout, stderr } = await execAsync(command, {
+            cwd: workDir,
+            maxBuffer: 1024 * 1024 * 50, // 50MB buffer for large APK processing output
+        });
+
+        if (stdout) console.log(`[${jobId}] DexProtector stdout (first 1000 chars):`, stdout.substring(0, 1000));
+        if (stderr) console.log(`[${jobId}] DexProtector stderr (first 1000 chars):`, stderr.substring(0, 1000));
+
+        // Verify output file exists
+        try {
+            await fs.access(outputPath);
+        } catch (error) {
+            throw new Error('DexProtector did not produce output file');
+        }
+
+        // Upload output APK to GCS
+        const outputFileName = `users/${userId}/outputs/${jobId}/protected.apk`;
+        await uploadToGCS(storage, outputPath, outputFileName);
+        console.log(`[${jobId}] Uploaded output APK to GCS`);
+
+        // Cleanup
+        await fs.rm(workDir, { recursive: true, force: true });
+        console.log(`[${jobId}] Cleaned up working directory`);
+
+        const processingTime = Date.now() - startTime;
+        console.log(`[${jobId}] Processing completed in ${processingTime}ms`);
+
+        return {
+            outputFile: outputFileName,
+            processingTime,
+        };
     } catch (error) {
-      throw new Error('DexProtector did not produce output file');
+        // Cleanup on error
+        try {
+            await fs.rm(workDir, { recursive: true, force: true });
+        } catch (cleanupError) {
+            console.error(`[${jobId}] Cleanup failed:`, cleanupError);
+        }
+
+        throw new Error(`DexProtector processing failed: ${error.message}`);
     }
-
-    // Upload output APK to GCS
-    const outputFileName = `users/${userId}/outputs/${jobId}/protected.apk`;
-    await uploadToGCS(storage, outputPath, outputFileName);
-    console.log(`[${jobId}] Uploaded output APK to GCS`);
-
-    // Cleanup
-    await fs.rm(workDir, { recursive: true, force: true });
-    console.log(`[${jobId}] Cleaned up working directory`);
-
-    const processingTime = Date.now() - startTime;
-    console.log(`[${jobId}] Processing completed in ${processingTime}ms`);
-
-    return {
-      outputFile: outputFileName,
-      processingTime,
-    };
-  } catch (error) {
-    // Cleanup on error
-    try {
-      await fs.rm(workDir, { recursive: true, force: true });
-    } catch (cleanupError) {
-      console.error(`[${jobId}] Cleanup failed:`, cleanupError);
-    }
-
-    throw new Error(`DexProtector processing failed: ${error.message}`);
-  }
 }
 
 /**
  * Download file from Google Cloud Storage
  */
 async function downloadFromGCS(storage, gcsPath, localPath) {
-  const bucket = storage.bucket(BUCKET_NAME);
-  const file = bucket.file(gcsPath);
+    const bucket = storage.bucket(BUCKET_NAME);
+    const file = bucket.file(gcsPath);
 
-  await file.download({ destination: localPath });
+    await file.download({ destination: localPath });
 }
 
 /**
  * Upload file to Google Cloud Storage
  */
 async function uploadToGCS(storage, localPath, gcsPath) {
-  const bucket = storage.bucket(BUCKET_NAME);
+    const bucket = storage.bucket(BUCKET_NAME);
 
-  await bucket.upload(localPath, {
-    destination: gcsPath,
-    metadata: {
-      cacheControl: 'no-cache',
-    },
-  });
+    await bucket.upload(localPath, {
+        destination: gcsPath,
+        metadata: {
+            cacheControl: 'no-cache',
+        },
+    });
 }
 
 /**
  * Get default DexProtector configuration
  */
 function getDefaultConfig() {
-  return `<?xml version="1.0" encoding="UTF-8"?>
+    return `<?xml version="1.0" encoding="UTF-8"?>
 <config xmlns="http://www.licelus.com/products/dexprotector">
   <!-- Build Settings -->
   <verbose>true</verbose>
@@ -150,5 +152,5 @@ function getDefaultConfig() {
 }
 
 module.exports = {
-  processAPK,
+    processAPK,
 };

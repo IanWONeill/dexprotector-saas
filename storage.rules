@@ -1,52 +1,69 @@
 rules_version = '2';
 service firebase.storage {
-  match /b/{bucket}/o {
+    match /b/{bucket}/o {
 
-    // Helper functions
-    function isAuthenticated() {
-      return request.auth != null;
+        // Helper functions
+        function isAuthenticated() {
+            return request.auth != null;
+        }
+
+        function isOwner(userId) {
+            return isAuthenticated() && request.auth.uid == userId;
+        }
+
+        // Check if user has admin claim (set via Firebase Admin SDK)
+        function isAdmin() {
+            return isAuthenticated() && 
+                request.auth.token.admin == true;
+        }
+
+        function isValidAPK() {
+            return request.resource.size < 120 * 1024 * 1024 && // Max 120MB
+                request.resource.size > 0 && // Must have content
+                (request.resource.contentType == 'application/vnd.android.package-archive' ||
+                    request.resource.contentType == 'application/octet-stream' ||
+                    request.resource.contentType == 'application/zip' ||
+                    request.resource.contentType.matches('.*apk.*'));
+        }
+
+        // User input files
+        match /users/{userId}/inputs/{jobId}/{fileName} {
+            // Users can upload their own APKs, admins can read all
+            allow create: if isOwner(userId) && isValidAPK();
+
+            // Users can read their own files, admins can read all
+            allow read: if isOwner(userId) || isAdmin();
+
+            // Users can delete their own input files, admins can delete any
+            allow delete: if isOwner(userId) || isAdmin();
+
+            // No updates
+            allow update: if false;
+        }
+
+        // User output files
+        match /users/{userId}/outputs/{jobId}/{fileName} {
+            // Users can read their own protected APKs, admins can read all
+            allow read: if isOwner(userId) || isAdmin();
+
+            // Backend service (unauthenticated) can create output files
+            allow create: if !isAuthenticated();
+
+            // Admins can delete output files
+            allow delete: if isAdmin();
+            
+            // No updates
+            allow update: if false;
+        }
+
+        // Admin can list all user directories
+        match /users/{userId}/{allPaths=**} {
+            allow list: if isAdmin();
+        }
+
+        // Default deny all
+        match /{allPaths=**} {
+            allow read, write: if false;
+        }
     }
-
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
-
-    function isValidAPK() {
-      return request.resource.size < 120 * 1024 * 1024 && // Max 120MB
-             request.resource.size > 0 && // Must have content
-             (request.resource.contentType == 'application/vnd.android.package-archive' ||
-              request.resource.contentType == 'application/octet-stream' ||
-              request.resource.contentType == 'application/zip' ||
-              request.resource.contentType.matches('.*apk.*'));
-    }
-
-    // User input files
-    match /users/{userId}/inputs/{jobId}/{fileName} {
-      // Users can upload their own APKs
-      allow create: if isOwner(userId) && isValidAPK();
-
-      // Users can read their own files
-      allow read: if isOwner(userId);
-
-      // Users can delete their own input files
-      allow delete: if isOwner(userId);
-
-      // No updates
-      allow update: if false;
-    }
-
-    // User output files
-    match /users/{userId}/outputs/{jobId}/{fileName} {
-      // Users can read their own protected APKs
-      allow read: if isOwner(userId);
-
-      // Only system can create/update/delete output files
-      allow create, update, delete: if false;
-    }
-
-    // Default deny all
-    match /{allPaths=**} {
-      allow read, write: if false;
-    }
-  }
 }
