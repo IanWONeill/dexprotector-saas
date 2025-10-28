@@ -14,26 +14,30 @@ export interface DexProtectorConfig {
     keypass?: string;
     sha256CertificateFingerprint?: string;
 
-    // Code Protection
+    // Code Stripping
+    stripLogging?: 'wtf' | 'error' | 'warning' | 'info' | 'debug' | 'verbose' | 'all' | false;
+
+    // Code Protection (self-closing tags or with filters)
     classEncryption?: ConfigOption;
     stringEncryption?: ConfigOption;
     hideAccess?: ConfigOption;
     annotationEncryption?: ConfigOption;
-    jniObfuscation?: boolean;
+    jniObfuscation?: boolean; // Self-closing tag
     nativeLibraryEncryption?: ConfigOption;
-    stripLogging?: ConfigOption;
 
     // Resource & Asset Protection
-    resourceEncryption?: ConfigOption;
-    assets?: ConfigOption;
+    resourceEncryption?: ResourceEncryptionOption;
 
-    // RASP (Runtime Application Self-Protection)
-    integrityControl?: RaspOption;
-    environmentChecks?: EnvironmentChecks;
+    // RASP - Runtime Application Self-Protection (boolean values or self-closing tags)
+    antiDebug?: boolean;
+    antiEmulator?: boolean;
+    antiManualInstall?: boolean;
+    antiMalware?: boolean; // Requires Alice Threat Intelligence
+    runtimeChecks?: boolean; // Self-closing tag when true
 
     // Network Security
-    publicKeyPinning?: any; // Using types from types/index.ts
-    certificateTransparency?: any; // Using types from types/index.ts
+    publicKeyPinning?: any;
+    certificateTransparency?: any;
 
     // Security Assessment
     securityAssessment?: SecurityAssessment;
@@ -44,18 +48,13 @@ interface ConfigOption {
     filters?: Filter[];
 }
 
-interface RaspOption {
+interface ResourceEncryptionOption {
     enabled: boolean;
-    callback?: string;
-}
-
-interface EnvironmentChecks {
-    enabled: boolean;
-    callback?: string;
-    debug?: boolean;
-    root?: boolean;
-    emulator?: boolean;
-    hooks?: boolean;
+    filters?: Filter[];
+    assets?: {
+        enabled: boolean;
+        filters?: Filter[];
+    };
 }
 
 interface SecurityAssessment {
@@ -105,7 +104,7 @@ export const TIER_DESCRIPTIONS: Record<ConfigTier, { name: string; description: 
     },
     standard: {
         name: 'Standard Protection',
-        description: '⚠️ BASIC - Minimal features. Consider Custom for better protection.',
+        description: '🔑 BASIC - Minimal features. Consider Custom for better protection.',
         features: [
             '✓ Class encryption (basic patterns)',
             '✓ String encryption (basic patterns)',
@@ -120,7 +119,7 @@ export const TIER_DESCRIPTIONS: Record<ConfigTier, { name: string; description: 
     },
     enhanced: {
         name: 'Enhanced Protection',
-        description: '� MODERATE - Decent protection but missing fine-tuned control.',
+        description: '🔒 MODERATE - Decent protection but missing fine-tuned control.',
         features: [
             '✓ ALL Standard features PLUS:',
             '✓ Annotation encryption',
@@ -135,7 +134,7 @@ export const TIER_DESCRIPTIONS: Record<ConfigTier, { name: string; description: 
     },
     custom: {
         name: 'Custom Configuration',
-        description: '🔒 MAXIMUM - Expert-level control. Best value for serious apps.',
+        description: '🛡️ MAXIMUM - Expert-level control. Best value for serious apps.',
         features: [
             '✓ ALL protection features unlocked',
             '✓ Granular filter control per feature',
@@ -158,11 +157,11 @@ export const PRESET_CONFIGS: Record<Exclude<ConfigTier, 'custom'>, DexProtectorC
         optimize: true,
         signMode: 'debug',
 
-        // Code Protection - Basic
+        // Code Protection - Minimal (2 features only)
         classEncryption: {
             enabled: true,
             filters: [
-                { pattern: 'com.myapp.**', type: 'include' }, // User replaces with their package
+                { pattern: 'com.myapp.**', type: 'include' },
             ],
         },
         stringEncryption: {
@@ -172,17 +171,7 @@ export const PRESET_CONFIGS: Record<Exclude<ConfigTier, 'custom'>, DexProtectorC
             ],
         },
 
-        // RASP - Minimal
-        integrityControl: {
-            enabled: true,
-        },
-        environmentChecks: {
-            enabled: true,
-            debug: true,
-            root: false,
-            emulator: false,
-            hooks: false,
-        },
+        // RASP - None (basic tier has no RASP)
     },
 
     standard: {
@@ -190,11 +179,11 @@ export const PRESET_CONFIGS: Record<Exclude<ConfigTier, 'custom'>, DexProtectorC
         optimize: true,
         signMode: 'debug',
 
-        // Code Protection - Full
+        // Code Protection - 5 features
         classEncryption: {
             enabled: true,
             filters: [
-                { pattern: '**', type: 'include' }, // Protect everything
+                { pattern: '**', type: 'include' },
             ],
         },
         stringEncryption: {
@@ -216,7 +205,7 @@ export const PRESET_CONFIGS: Record<Exclude<ConfigTier, 'custom'>, DexProtectorC
             ],
         },
 
-        // Resource Protection
+        // Resource Protection (basic)
         resourceEncryption: {
             enabled: true,
             filters: [
@@ -224,17 +213,9 @@ export const PRESET_CONFIGS: Record<Exclude<ConfigTier, 'custom'>, DexProtectorC
             ],
         },
 
-        // RASP - Standard
-        integrityControl: {
-            enabled: true,
-        },
-        environmentChecks: {
-            enabled: true,
-            debug: true,
-            root: true,
-            emulator: true,
-            hooks: false,
-        },
+        // RASP - Basic environment checks
+        antiDebug: true,
+        antiEmulator: true,
     },
 
     enhanced: {
@@ -242,7 +223,17 @@ export const PRESET_CONFIGS: Record<Exclude<ConfigTier, 'custom'>, DexProtectorC
         optimize: true,
         signMode: 'debug',
 
-        // Code Protection - Maximum
+        // Security Assessment
+        securityAssessment: {
+            signingCertificateCompromised: 'error',
+            signingCertificateWeakKey: 'error',
+            dependencyCheck: 'warning',
+        },
+
+        // Code Stripping
+        stripLogging: 'all', // Valid values: wtf, error, warning, info, debug, verbose, all
+
+        // Code Protection - Maximum (8 features)
         classEncryption: {
             enabled: true,
             filters: [
@@ -274,45 +265,27 @@ export const PRESET_CONFIGS: Record<Exclude<ConfigTier, 'custom'>, DexProtectorC
                 { pattern: '**', type: 'include' },
             ],
         },
-        stripLogging: {
-            enabled: true,
-            filters: [
-                { pattern: 'android.util.Log', type: 'include' },
-            ],
-        },
 
-        // Resource Protection - Full
+        // Resource Protection - Full (assets nested inside)
         resourceEncryption: {
             enabled: true,
             filters: [
                 { pattern: '**', type: 'include' },
             ],
-        },
-        assets: {
-            enabled: true,
-            filters: [
-                { pattern: '**', type: 'include' },
-            ],
-        },
-
-        // RASP - Maximum
-        integrityControl: {
-            enabled: true,
-        },
-        environmentChecks: {
-            enabled: true,
-            debug: true,
-            root: true,
-            emulator: true,
-            hooks: true,
+            assets: {
+                enabled: true,
+                filters: [
+                    { pattern: '**', type: 'include' },
+                ],
+            },
         },
 
-        // Security Assessment
-        securityAssessment: {
-            signingCertificateCompromised: 'error',
-            signingCertificateWeakKey: 'error',
-            dependencyCheck: 'warning',
-        },
+        // RASP - Maximum (all valid DexProtector tags)
+        antiDebug: true,
+        antiEmulator: true,
+        antiManualInstall: true,
+        antiMalware: false, // Requires Alice Threat Intelligence
+        runtimeChecks: true,
     },
 };
 
@@ -337,7 +310,7 @@ export const CONFIG_SECTIONS = {
             { key: 'annotationEncryption', label: 'Annotation Encryption', type: 'filter', default: false, description: 'Encrypt runtime annotations' },
             { key: 'jniObfuscation', label: 'JNI Obfuscation', type: 'boolean', default: false, description: 'Obfuscate native methods' },
             { key: 'nativeLibraryEncryption', label: 'Native Library Encryption', type: 'filter', default: false, description: 'Encrypt .so files' },
-            { key: 'stripLogging', label: 'Strip Logging', type: 'filter', default: false, description: 'Remove Log calls' },
+            { key: 'stripLogging', label: 'Strip Logging', type: 'enum', values: ['wtf', 'error', 'warning', 'info', 'debug', 'verbose', 'all'], default: false, description: 'Remove android.util.Log calls' },
         ],
     },
     RESOURCE_PROTECTION: {
@@ -350,13 +323,13 @@ export const CONFIG_SECTIONS = {
     },
     RASP: {
         title: 'Runtime Protection (RASP)',
-        description: 'Detect hostile environments at runtime',
+        description: 'Runtime Application Self-Protection - environment checks',
         options: [
-            { key: 'integrityControl', label: 'Integrity Control', type: 'rasp', default: true, description: 'Detect tampering' },
-            { key: 'environmentChecks.debug', label: 'Debug Detection', type: 'boolean', default: true, description: 'Detect debuggers' },
-            { key: 'environmentChecks.root', label: 'Root Detection', type: 'boolean', default: true, description: 'Detect rooted devices' },
-            { key: 'environmentChecks.emulator', label: 'Emulator Detection', type: 'boolean', default: true, description: 'Detect emulators' },
-            { key: 'environmentChecks.hooks', label: 'Hook Detection', type: 'boolean', default: false, description: 'Detect Frida/Xposed' },
+            { key: 'antiDebug', label: 'Anti-Debug', type: 'boolean', default: true, description: 'Close app if debugger attached' },
+            { key: 'antiEmulator', label: 'Anti-Emulator', type: 'boolean', default: true, description: 'Prevent running on emulators' },
+            { key: 'antiManualInstall', label: 'Anti-Manual Install', type: 'boolean', default: true, description: 'Detect sideloaded apps' },
+            { key: 'antiMalware', label: 'Anti-Malware', type: 'boolean', default: false, description: 'Detect malware (requires Alice)' },
+            { key: 'runtimeChecks', label: 'Runtime Checks', type: 'boolean', default: true, description: 'Detect custom firmware & root' },
         ],
     },
     SECURITY_ASSESSMENT: {
@@ -407,6 +380,16 @@ export function generateXML(config: DexProtectorConfig): string {
         }
     }
 
+    // Code Stripping - stripLogging is a simple string value
+    // Only add if it has a valid value (not false, not empty string, not undefined)
+    // If explicitly set to false, don't include it. Otherwise default to 'all' for enhanced tier
+    if (config.stripLogging && typeof config.stripLogging === 'string' && config.stripLogging.length > 0) {
+        xml += `  <stripLogging>${config.stripLogging}</stripLogging>\n`;
+    } else if (config.stripLogging !== false && config.stripLogging !== undefined) {
+        // If it's an empty string or any other truthy non-string value, default to 'all'
+        xml += `  <stripLogging>all</stripLogging>\n`;
+    }
+
     // Code Protection
     if (config.classEncryption?.enabled) {
         xml += addFilterTag('classEncryption', config.classEncryption.filters);
@@ -426,11 +409,8 @@ export function generateXML(config: DexProtectorConfig): string {
     if (config.nativeLibraryEncryption?.enabled) {
         xml += addFilterTag('nativeLibraryEncryption', config.nativeLibraryEncryption.filters);
     }
-    if (config.stripLogging?.enabled) {
-        xml += addFilterTag('stripLogging', config.stripLogging.filters);
-    }
 
-    // Resource Protection
+    // Resource Protection - assets nested inside resourceEncryption
     if (config.resourceEncryption?.enabled) {
         xml += '  <resourceEncryption>\n';
         if (config.resourceEncryption.filters) {
@@ -440,11 +420,12 @@ export function generateXML(config: DexProtectorConfig): string {
             });
             xml += '    </filters>\n';
         }
-        if (config.assets?.enabled) {
+        // Assets nested inside resourceEncryption
+        if (config.resourceEncryption.assets?.enabled) {
             xml += '    <assets>\n';
-            if (config.assets.filters) {
+            if (config.resourceEncryption.assets.filters) {
                 xml += '      <filters>\n';
-                config.assets.filters.forEach(filter => {
+                config.resourceEncryption.assets.filters.forEach(filter => {
                     xml += `        <filter${filter.type === 'exclude' ? ' type="exclude"' : ''}>${filter.pattern}</filter>\n`;
                 });
                 xml += '      </filters>\n';
@@ -454,32 +435,34 @@ export function generateXML(config: DexProtectorConfig): string {
         xml += '  </resourceEncryption>\n';
     }
 
-    // RASP
-    if (config.integrityControl?.enabled) {
-        const callback = config.integrityControl.callback ? ` callback="${config.integrityControl.callback}"` : '';
-        xml += `  <integrityControl${callback}/>\n`;
+    // RASP - boolean elements or self-closing tags
+    if (config.antiDebug !== undefined) {
+        xml += `  <antiDebug>${config.antiDebug}</antiDebug>\n`;
     }
-    if (config.environmentChecks?.enabled) {
-        const callback = config.environmentChecks.callback ? ` callback="${config.environmentChecks.callback}"` : '';
-        xml += `  <environmentChecks${callback}>\n`;
-        if (config.environmentChecks.debug) xml += '    <debug/>\n';
-        if (config.environmentChecks.root) xml += '    <root/>\n';
-        if (config.environmentChecks.emulator) xml += '    <emulator/>\n';
-        if (config.environmentChecks.hooks) xml += '    <hooks/>\n';
-        xml += '  </environmentChecks>\n';
+    if (config.antiEmulator !== undefined) {
+        xml += `  <antiEmulator>${config.antiEmulator}</antiEmulator>\n`;
+    }
+    if (config.antiManualInstall !== undefined) {
+        xml += `  <antiManualInstall>${config.antiManualInstall}</antiManualInstall>\n`;
+    }
+    if (config.antiMalware !== undefined) {
+        xml += `  <antiMalware>${config.antiMalware}</antiMalware>\n`;
+    }
+    if (config.runtimeChecks === true) {
+        xml += '  <runtimeChecks/>\n';
     }
 
-    // Security Assessment
+    // Security Assessment - mode attribute syntax
     if (config.securityAssessment) {
         xml += '  <securityAssessment>\n';
         if (config.securityAssessment.signingCertificateCompromised) {
-            xml += `    <signingCertificateCompromised>${config.securityAssessment.signingCertificateCompromised}</signingCertificateCompromised>\n`;
+            xml += `    <signingCertificateCompromised mode="${config.securityAssessment.signingCertificateCompromised}"/>\n`;
         }
         if (config.securityAssessment.signingCertificateWeakKey) {
-            xml += `    <signingCertificateWeakKey>${config.securityAssessment.signingCertificateWeakKey}</signingCertificateWeakKey>\n`;
+            xml += `    <signingCertificateWeakKey mode="${config.securityAssessment.signingCertificateWeakKey}"/>\n`;
         }
         if (config.securityAssessment.dependencyCheck) {
-            xml += `    <dependencyCheck>${config.securityAssessment.dependencyCheck}</dependencyCheck>\n`;
+            xml += `    <dependencyCheck mode="${config.securityAssessment.dependencyCheck}"/>\n`;
         }
         xml += '  </securityAssessment>\n';
     }
