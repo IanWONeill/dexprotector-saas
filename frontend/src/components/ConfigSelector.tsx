@@ -175,7 +175,7 @@ interface CustomConfigEditorProps {
 function CustomConfigEditor({ tier, config, onChange, onSubmit, onCancel, keystoreFile, onKeystoreUpload }: CustomConfigEditorProps) {
     const [activeSection, setActiveSection] = useState<'code' | 'resource' | 'rasp' | 'network' | 'security' | 'signing'>('code')
     const [showSidebar, setShowSidebar] = useState(false)
-    
+
     // Preset tiers are read-only except for filter customization
     const isReadOnly = tier !== 'custom'
 
@@ -599,7 +599,7 @@ function RaspProtectionSection({ config, toggleOption, isReadOnly, tier }: Secti
 function NetworkSecuritySection({ config, toggleOption, isReadOnly, tier }: SectionProps) {
     const [newDomain, setNewDomain] = useState('')
     const [newPin, setNewPin] = useState('')
-    
+
     return (
         <div className="space-y-6">
             <h3 className="text-xl font-bold font-mono gradient-text">[NETWORK_SECURITY]</h3>
@@ -616,11 +616,11 @@ function NetworkSecuritySection({ config, toggleOption, isReadOnly, tier }: Sect
                         disabled={isReadOnly && !config.publicKeyPinning}
                         tooltip="Prevents man-in-the-middle attacks by validating that the server's SSL certificate matches expected SHA-256 hashes. Essential for apps making sensitive API calls (banking, payments, authentication). Configure domains and their certificate pins below."
                     />
-                    
+
                     {config.publicKeyPinning?.enabled && (
                         <div className="p-4 bg-card/50 rounded-lg border border-border backdrop-blur space-y-4">
                             <div className="text-sm font-medium text-foreground font-mono">Certificate Pins</div>
-                            
+
                             {/* Domain & Pin Manager */}
                             <div className="space-y-3">
                                 <div className="flex gap-2">
@@ -657,12 +657,12 @@ function NetworkSecuritySection({ config, toggleOption, isReadOnly, tier }: Sect
                                         <Plus className="w-4 h-4" />
                                     </button>
                                 </div>
-                                
+
                                 <div className="text-xs text-muted-foreground/70 font-mono">
                                     Get certificate pins: openssl s_client -connect example.com:443 | openssl x509 -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | openssl enc -base64
                                 </div>
                             </div>
-                            
+
                             {/* Display existing domains */}
                             {config.publicKeyPinning?.domains && config.publicKeyPinning.domains.length > 0 && (
                                 <div className="space-y-2">
@@ -705,11 +705,11 @@ function NetworkSecuritySection({ config, toggleOption, isReadOnly, tier }: Sect
                         disabled={isReadOnly && !config.certificateTransparency}
                         tooltip="Monitors CT logs to detect unauthorized SSL certificates issued for your domains. Helps prevent certificate mis-issuance and impersonation attacks. Configure which domains to monitor below."
                     />
-                    
+
                     {config.certificateTransparency?.enabled && (
                         <div className="p-4 bg-card/50 rounded-lg border border-border backdrop-blur space-y-4">
                             <div className="text-sm font-medium text-foreground font-mono">Monitored Domains</div>
-                            
+
                             <div className="flex gap-2">
                                 <input
                                     type="text"
@@ -732,7 +732,7 @@ function NetworkSecuritySection({ config, toggleOption, isReadOnly, tier }: Sect
                                     Add
                                 </button>
                             </div>
-                            
+
                             {config.certificateTransparency?.domains && config.certificateTransparency.domains.length > 0 && (
                                 <div className="space-y-2">
                                     {config.certificateTransparency.domains.map((domain, idx) => (
@@ -755,7 +755,7 @@ function NetworkSecuritySection({ config, toggleOption, isReadOnly, tier }: Sect
                     )}
                 </>
             )}
-            
+
             {tier !== 'custom' && (
                 <div className="text-xs text-yellow-400 font-mono bg-yellow-900/20 border border-yellow-500/30 rounded p-3">
                     ⚠️ Network Security features are only available in Custom tier. Upgrade for SSL pinning and certificate transparency monitoring.
@@ -996,9 +996,8 @@ function ToggleOption({ label, description, enabled, onToggle, disabled, tooltip
             <button
                 onClick={() => !disabled && onToggle(!enabled)}
                 disabled={disabled}
-                className={`relative w-14 h-7 rounded-full transition-all ${
-                    disabled ? 'cursor-not-allowed opacity-50' : ''
-                } ${enabled ? 'bg-primary' : 'bg-border'}`}
+                className={`relative w-14 h-7 rounded-full transition-all ${disabled ? 'cursor-not-allowed opacity-50' : ''
+                    } ${enabled ? 'bg-primary' : 'bg-border'}`}
             >
                 <div
                     className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition-transform ${enabled ? 'translate-x-7' : 'translate-x-0'
@@ -1057,18 +1056,18 @@ function FilterManager({ label, description, filters, onChange, tier = 'custom' 
 
     const maxFilters = getMaxFilters(tier)
     const canAddMore = filters.length < maxFilters
-    
+
     const validatePattern = (pattern: string): boolean => {
         if (!pattern.trim()) {
             setPatternError('Pattern cannot be empty')
             return false
         }
-        
+
         if (!isPatternAllowed(tier, pattern.trim())) {
             setPatternError(getPatternValidationMessage(tier))
             return false
         }
-        
+
         setPatternError('')
         return true
     }
@@ -1139,13 +1138,13 @@ function FilterManager({ label, description, filters, onChange, tier = 'custom' 
                         ⚠️ {tier === 'basic' ? 'Basic tier' : tier === 'standard' ? 'Standard tier' : 'Enhanced tier'} limited to {maxFilters} filter{maxFilters !== 1 ? 's' : ''}. Upgrade to Custom tier for unlimited filters.
                     </div>
                 )}
-                
+
                 {patternError && (
                     <div className="text-xs text-red-400 font-mono bg-red-900/20 border border-red-500/30 rounded p-2">
                         ❌ {patternError}
                     </div>
                 )}
-                
+
                 <div className="flex items-center gap-2 pt-2 border-t border-border">
                     <input
                         type="text"

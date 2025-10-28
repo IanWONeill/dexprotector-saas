@@ -32,9 +32,11 @@ A cloud-based SaaS platform for protecting Android applications using Licel DexP
 ## Critical Notes
 
 ### DexProtector License
+
 DexProtector requires the system time to be set to **February 1, 2025**. This is handled automatically using `libfaketime` in the Docker container.
 
 ### Firebase SDK Version
+
 **Must use Firebase 9.23.0** - Do not upgrade to v10+ as it breaks Next.js static export with undici module.
 
 ## Project Structure
@@ -108,12 +110,12 @@ firebase deploy --only hosting
 
 # Deploy Backend
 cd backend
-gcloud run deploy dexprotector-processor 
-  --source . 
-  --region us-central1 
-  --allow-unauthenticated 
-  --memory 2Gi 
-  --timeout 600 
+gcloud run deploy dexprotector-processor
+  --source .
+  --region us-central1
+  --allow-unauthenticated
+  --memory 2Gi
+  --timeout 600
   --clear-base-image
 
 # Deploy Firestore Rules
@@ -134,6 +136,7 @@ firebase deploy --only firestore:rules
 ## Current Status
 
 ✅ **Deployed and Working:**
+
 - Frontend (Firebase Hosting)
 - Backend (Cloud Run)
 - Authentication (Email + Google OAuth)
@@ -142,6 +145,7 @@ firebase deploy --only firestore:rules
 - Firestore job tracking
 
 ⏳ **In Progress:**
+
 - Backend APK processing integration
 - Job status updates
 - Protected APK downloads
@@ -150,6 +154,7 @@ firebase deploy --only firestore:rules
 ## Environment Variables
 
 Create `frontend/.env.local`:
+
 ```
 NEXT_PUBLIC_FIREBASE_API_KEY=your_api_key
 NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
@@ -162,6 +167,7 @@ NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
 ## License
 
 Proprietary - All Rights Reserved
+
 ```
 
 ## Environment Variables
@@ -175,3 +181,4 @@ Proprietary - All Rights Reserved
 ## Security
 
 This platform handles sensitive APK files. See [docs/SECURITY.md](docs/SECURITY.md) for security considerations.
+```

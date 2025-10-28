@@ -39,9 +39,8 @@ export default function MobileNav({ isAdmin }: MobileNavProps) {
 
             {/* Mobile Menu Sidebar */}
             <div
-                className={`fixed top-0 left-0 h-full w-[280px] bg-gradient-to-b from-[#1a1f2e] via-[#0f1419] to-[#0a0d12] border-r-2 border-primary z-50 transform transition-transform duration-300 lg:hidden shadow-[0_0_50px_rgba(0,255,157,0.3)] ${
-                    isOpen ? 'translate-x-0' : '-translate-x-full'
-                }`}
+                className={`fixed top-0 left-0 h-full w-[280px] bg-gradient-to-b from-[#1a1f2e] via-[#0f1419] to-[#0a0d12] border-r-2 border-primary z-50 transform transition-transform duration-300 lg:hidden shadow-[0_0_50px_rgba(0,255,157,0.3)] ${isOpen ? 'translate-x-0' : '-translate-x-full'
+                    }`}
             >
                 <div className="flex flex-col h-full p-6 safe-top safe-bottom backdrop-blur-xl">
                     {/* Header */}

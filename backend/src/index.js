@@ -38,10 +38,10 @@ firestore.settings({
     try {
         console.log('Testing Firestore connectivity...');
         const testPromise = firestore.collection('_test').doc('connection').get();
-        const timeoutPromise = new Promise((_, reject) => 
+        const timeoutPromise = new Promise((_, reject) =>
             setTimeout(() => reject(new Error('Connection test timeout')), 5000)
         );
-        
+
         await Promise.race([testPromise, timeoutPromise]);
         console.log('✓ Firestore connection successful (using Firebase Admin SDK)');
     } catch (error) {

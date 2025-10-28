@@ -38,7 +38,7 @@ export default function AdminHeader({ pageTitle, subtitle }: AdminHeaderProps) {
                     </div>
                 </div>
             </header>
-            
+
             {/* Page Title Bar */}
             <div className="border-b border-border/50 bg-card/30 backdrop-blur-sm">
                 <div className="container mx-auto px-4 py-4 sm:py-6">

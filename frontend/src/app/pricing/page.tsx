@@ -74,7 +74,7 @@ export default function PricingPage() {
                     if (userDoc.exists()) {
                         setUserCredits(userDoc.data().credits || 0)
                     }
-                    
+
                     // Check if user is admin
                     const adminDoc = await getDoc(doc(db, 'admins', user.uid))
                     setIsAdmin(adminDoc.exists())
@@ -219,7 +219,7 @@ export default function PricingPage() {
                 {/* Features */}
                 <div className="max-w-4xl mx-auto terminal-border bg-card/30 backdrop-blur rounded-lg p-8 mb-12">
                     <h2 className="text-3xl font-bold gradient-text text-center mb-8 font-mono">
-            // WHAT_IS_INCLUDED
+            // INCLUDES
                     </h2>
 
                     <div className="grid md:grid-cols-2 gap-6">

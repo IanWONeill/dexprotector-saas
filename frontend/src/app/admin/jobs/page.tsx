@@ -304,7 +304,7 @@ export default function AdminJobs() {
     return (
         <div className="min-h-screen bg-[#0f1419] text-foreground">
             {/* Header */}
-            <AdminHeader 
+            <AdminHeader
                 pageTitle="JOBS_MANAGEMENT"
                 subtitle="monitor and manage protection jobs"
             />

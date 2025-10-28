@@ -243,7 +243,7 @@ exports.processJob = functions.firestore
         // Call the backend processing service (fire-and-forget)
         // Don't wait for response since processing can take minutes
         const fetch = require('node-fetch');
-        
+
         fetch(`${BACKEND_URL}/process`, {
             method: 'POST',
             headers: {

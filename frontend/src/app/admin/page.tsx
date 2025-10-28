@@ -228,8 +228,8 @@ export default function AdminDashboard() {
     return (
         <div className="min-h-screen bg-[#0f1419] text-white">
             {/* Header */}
-            <AdminHeader 
-                pageTitle="ADMIN_DASHBOARD" 
+            <AdminHeader
+                pageTitle="ADMIN_DASHBOARD"
                 subtitle="system overview and management"
             />
 

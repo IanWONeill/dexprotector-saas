@@ -12,15 +12,15 @@ export interface TierFeatures {
     jniObfuscation: boolean
     nativeLibraryEncryption: boolean
     stripLogging: boolean
-    
+
     // Resource Protection
     resourceEncryption: boolean
     assets: boolean
-    
+
     // RASP
     integrityControl: boolean
     environmentChecks: boolean
-    
+
     // Network Security
     publicKeyPinning: boolean
     certificateTransparency: boolean
@@ -36,20 +36,20 @@ export const TIER_FEATURES: Record<string, TierFeatures> = {
         jniObfuscation: false,
         nativeLibraryEncryption: false,
         stripLogging: false,
-        
+
         // Resource Protection
         resourceEncryption: false,
         assets: false,
-        
+
         // RASP
         integrityControl: true,
         environmentChecks: false, // Removed due to DexProtector compatibility
-        
+
         // Network Security
         publicKeyPinning: false,
         certificateTransparency: false,
     },
-    
+
     standard: {
         // Code Protection (5 features)
         classEncryption: true,
@@ -59,20 +59,20 @@ export const TIER_FEATURES: Record<string, TierFeatures> = {
         jniObfuscation: false,
         nativeLibraryEncryption: true,
         stripLogging: false,
-        
+
         // Resource Protection
         resourceEncryption: true,
         assets: false,
-        
+
         // RASP
         integrityControl: true,
         environmentChecks: false,
-        
+
         // Network Security
         publicKeyPinning: false,
         certificateTransparency: false,
     },
-    
+
     enhanced: {
         // Code Protection (8 features)
         classEncryption: true,
@@ -82,20 +82,20 @@ export const TIER_FEATURES: Record<string, TierFeatures> = {
         jniObfuscation: true,
         nativeLibraryEncryption: true,
         stripLogging: true,
-        
+
         // Resource Protection
         resourceEncryption: true,
         assets: true,
-        
+
         // RASP
         integrityControl: true,
         environmentChecks: true, // Includes antiRoot, antiEmulator, antiFrida
-        
+
         // Network Security
         publicKeyPinning: false,
         certificateTransparency: false,
     },
-    
+
     custom: {
         // All features available
         classEncryption: true,
@@ -109,7 +109,7 @@ export const TIER_FEATURES: Record<string, TierFeatures> = {
         assets: true,
         integrityControl: true,
         environmentChecks: true,
-        
+
         // Network Security
         publicKeyPinning: true,
         certificateTransparency: true,
@@ -131,7 +131,7 @@ export function isFeatureAvailable(tier: string, feature: keyof TierFeatures): b
 export function getAvailableFeatures(tier: string): (keyof TierFeatures)[] {
     const tierFeatures = TIER_FEATURES[tier]
     if (!tierFeatures) return []
-    
+
     return (Object.keys(tierFeatures) as (keyof TierFeatures)[]).filter(
         feature => tierFeatures[feature]
     )

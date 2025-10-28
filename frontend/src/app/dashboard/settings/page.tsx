@@ -98,16 +98,16 @@ export default function SettingsPage() {
 
             {/* Header */}
             <div className="relative z-10">
-                <DashboardHeader 
+                <DashboardHeader
                     credits={user?.credits}
                     onSignOut={handleSignOut}
                     showAuthButtons={false}
                 />
-                
+
                 {/* Back Button */}
                 <div className="container mx-auto px-4 py-4 border-b border-border/50">
-                    <Link 
-                        href="/dashboard" 
+                    <Link
+                        href="/dashboard"
                         className="inline-flex items-center space-x-2 text-muted-foreground hover:text-primary transition-colors font-mono text-sm touch-manipulation"
                     >
                         <ArrowLeft className="h-4 w-4" />

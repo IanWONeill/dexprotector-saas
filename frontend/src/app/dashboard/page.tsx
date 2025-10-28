@@ -165,7 +165,7 @@ export default function DashboardPage() {
     return (
         <div className="min-h-screen bg-[#0f1419]">
             {/* Header */}
-            <DashboardHeader 
+            <DashboardHeader
                 credits={user?.credits}
                 isAdmin={user?.isAdmin}
                 onSignOut={handleSignOut}

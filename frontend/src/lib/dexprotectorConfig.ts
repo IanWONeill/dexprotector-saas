@@ -108,7 +108,7 @@ export const TIER_DESCRIPTIONS: Record<ConfigTier, { name: string; description: 
         description: '⚠️ BASIC - Minimal features. Consider Custom for better protection.',
         features: [
             '✓ Class encryption (basic patterns)',
-            '✓ String encryption (basic patterns)', 
+            '✓ String encryption (basic patterns)',
             '✓ Method call obfuscation',
             '✓ Native library encryption',
             '✓ Resource encryption (basic)',

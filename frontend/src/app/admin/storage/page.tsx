@@ -184,7 +184,7 @@ export default function AdminStorage() {
     return (
         <div className="min-h-screen bg-[#0f1419] text-foreground">
             {/* Header */}
-            <AdminHeader 
+            <AdminHeader
                 pageTitle="STORAGE_MANAGEMENT"
                 subtitle="monitor and cleanup storage"
             />

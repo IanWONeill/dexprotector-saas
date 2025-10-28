@@ -11,11 +11,11 @@ interface DashboardHeaderProps {
     showAuthButtons?: boolean;
 }
 
-export default function DashboardHeader({ 
-    credits, 
-    isAdmin, 
+export default function DashboardHeader({
+    credits,
+    isAdmin,
     onSignOut,
-    showAuthButtons = true 
+    showAuthButtons = true
 }: DashboardHeaderProps) {
     return (
         <header className="border-b border-border bg-[#0f1419]/95 backdrop-blur-sm sticky top-0 z-30 safe-top">

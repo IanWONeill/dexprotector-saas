@@ -17,7 +17,7 @@ const PRESET_CONFIGS = {
         verbose: false,
         optimize: true,
         signMode: 'debug',
-        
+
         // Security Assessment
         securityAssessment: {
             signingCertificateCompromised: 'error',
@@ -39,11 +39,11 @@ const PRESET_CONFIGS = {
         jniObfuscation: false,
         nativeLibraryEncryption: { enabled: false },
         stripLogging: false,
-        
+
         // Resource Protection (OFF)
         resourceEncryption: { enabled: false },
         assets: { enabled: false },
-        
+
         // RASP - Minimal
         integrityControl: { enabled: true },
         antiDebug: false,
@@ -58,7 +58,7 @@ const PRESET_CONFIGS = {
         verbose: false,
         optimize: true,
         signMode: 'debug',
-        
+
         // Security Assessment
         securityAssessment: {
             signingCertificateCompromised: 'error',
@@ -86,14 +86,14 @@ const PRESET_CONFIGS = {
             filters: [{ pattern: '**', type: 'include' }],
         },
         stripLogging: false,
-        
+
         // Resource Protection (ON)
         resourceEncryption: {
             enabled: true,
             filters: [{ pattern: '**', type: 'include' }],
         },
         assets: { enabled: false },
-        
+
         // RASP - Standard
         integrityControl: { enabled: true },
         antiDebug: false,
@@ -108,7 +108,7 @@ const PRESET_CONFIGS = {
         verbose: false,
         optimize: true,
         signMode: 'debug',
-        
+
         // Security Assessment
         securityAssessment: {
             signingCertificateCompromised: 'error',
@@ -139,7 +139,7 @@ const PRESET_CONFIGS = {
             filters: [{ pattern: '**', type: 'include' }],
         },
         stripLogging: 'all',
-        
+
         // Resource Protection (FULL)
         resourceEncryption: {
             enabled: true,
@@ -149,7 +149,7 @@ const PRESET_CONFIGS = {
             enabled: true,
             filters: [{ pattern: '**', type: 'include' }],
         },
-        
+
         // RASP - Maximum
         integrityControl: { enabled: true },
         antiDebug: true,
@@ -278,7 +278,7 @@ function generateXML(config) {
         const callback = config.integrityControl.callback ? ` callback="${config.integrityControl.callback}"` : '';
         xml += `  <integrityControl${callback}/>\n`;
     }
-    
+
     // Boolean RASP elements - explicitly set
     if (config.antiDebug !== undefined) {
         xml += `  <antiDebug>${config.antiDebug}</antiDebug>\n`;
@@ -295,7 +295,7 @@ function generateXML(config) {
     if (config.runtimeChecks === true) {
         xml += '  <runtimeChecks/>\n';
     }
-    
+
     // Advanced RASP with mode/onDetected attributes
     if (config.rasp) {
         if (config.rasp.antiRoot) {
