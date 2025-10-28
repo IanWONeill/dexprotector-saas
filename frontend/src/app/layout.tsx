@@ -3,7 +3,6 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import { Toaster } from 'react-hot-toast'
 import ServiceWorkerRegister from '@/components/ServiceWorkerRegister'
-import FirebaseBlockerDetector from '@/components/FirebaseBlockerDetector'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -54,7 +53,6 @@ export default function RootLayout({
             </head>
             <body className={inter.className}>
                 <ServiceWorkerRegister />
-                <FirebaseBlockerDetector />
                 {children}
                 <Toaster position="top-right" />
             </body>
