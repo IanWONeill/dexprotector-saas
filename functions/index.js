@@ -5,13 +5,71 @@ const stripe = require('stripe')(functions.config().stripe?.secret_key || proces
 admin.initializeApp();
 const db = admin.firestore();
 
-// Credit packages configuration
+// Simple in-memory cache for user data (reduces Firestore reads)
+const userCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Get cached user data with TTL
+ */
+async function getCachedUserData(userId) {
+    const now = Date.now();
+    const cached = userCache.get(userId);
+
+    if (cached && (now - cached.timestamp) < CACHE_TTL) {
+        return cached.data;
+    }
+
+    // Cache miss or expired - fetch from Firestore
+    const userDoc = await db.collection('users').doc(userId).get();
+    if (!userDoc.exists) {
+        return null;
+    }
+
+    const userData = userDoc.data();
+
+    // Cache the result
+    userCache.set(userId, {
+        data: userData,
+        timestamp: now
+    });
+
+    return userData;
+}
+
+/**
+ * Clear user cache (useful for testing or when user data changes)
+ */
+function clearUserCache(userId = null) {
+    if (userId) {
+        userCache.delete(userId);
+    } else {
+        userCache.clear();
+    }
+}
+
+// Configuration
 const CREDIT_PACKAGES = {
-    'price_1SLx6hKdyWMKWoqkYKjSCZzA': { credits: 10, name: 'Starter' },
-    'price_1SLx7uKdyWMKWoqkzQeVpNpG': { credits: 50, name: 'Professional' },
-    'price_1SLx8dKdyWMKWoqkapfgJqRN': { credits: 100, name: 'Business' },
-    'price_1SLx9iKdyWMKWoqkmURWWEB8': { credits: 500, name: 'Enterprise' },
+    'price_1SLx6hKdyWMKWoqkYKjSCZzA': { credits: 10, name: 'Starter', price: 9.99 },
+    'price_1SLx7uKdyWMKWoqkzQeVpNpG': { credits: 50, name: 'Professional', price: 39.99 },
+    'price_1SLx8dKdyWMKWoqkapfgJqRN': { credits: 100, name: 'Business', price: 69.99 },
+    'price_1SLx9iKdyWMKWoqkmURWWEB8': { credits: 500, name: 'Enterprise', price: 299.99 },
 };
+
+const BACKEND_URL = process.env.BACKEND_URL || 'https://dexprotector-processor-447369235479.us-central1.run.app';
+
+/**
+ * Structured logging helper
+ */
+function log(level, message, metadata = {}) {
+    const logEntry = {
+        timestamp: new Date().toISOString(),
+        level,
+        message,
+        ...metadata,
+    };
+    console.log(JSON.stringify(logEntry));
+}
 
 /**
  * Create Stripe Checkout Session
@@ -26,11 +84,14 @@ exports.createCheckoutSession = functions.https.onCall(async (data, context) => 
         );
     }
 
-    const { priceId } = data;
+    const { priceId, origin } = data;
     const userId = context.auth.uid;
+
+    log('info', 'Creating checkout session', { userId, priceId });
 
     // Validate price ID
     if (!CREDIT_PACKAGES[priceId]) {
+        log('warn', 'Invalid price ID requested', { userId, priceId });
         throw new functions.https.HttpsError(
             'invalid-argument',
             'Invalid price ID'
@@ -38,9 +99,9 @@ exports.createCheckoutSession = functions.https.onCall(async (data, context) => 
     }
 
     try {
-        // Get user email
-        const userDoc = await db.collection('users').doc(userId).get();
-        const userEmail = userDoc.exists ? userDoc.data().email : context.auth.token.email;
+        // Get cached user data (reduces Firestore reads)
+        const userData = await getCachedUserData(userId);
+        const userEmail = userData?.email || context.auth.token.email;
 
         // Create Stripe checkout session
         const session = await stripe.checkout.sessions.create({
@@ -52,8 +113,8 @@ exports.createCheckoutSession = functions.https.onCall(async (data, context) => 
                     quantity: 1,
                 },
             ],
-            success_url: `${data.origin || 'https://dexprotector-saas-ian.web.app'}/dashboard?payment=success`,
-            cancel_url: `${data.origin || 'https://dexprotector-saas-ian.web.app'}/pricing?payment=cancelled`,
+            success_url: `${origin || 'https://dexprotector-saas-ian.web.app'}/dashboard?payment=success`,
+            cancel_url: `${origin || 'https://dexprotector-saas-ian.web.app'}/pricing?payment=cancelled`,
             customer_email: userEmail,
             client_reference_id: userId,
             metadata: {
@@ -63,12 +124,22 @@ exports.createCheckoutSession = functions.https.onCall(async (data, context) => 
             },
         });
 
+        log('info', 'Checkout session created', {
+            userId,
+            sessionId: session.id,
+            credits: CREDIT_PACKAGES[priceId].credits,
+        });
+
         return { sessionId: session.id, url: session.url };
     } catch (error) {
-        console.error('Error creating checkout session:', error);
+        log('error', 'Error creating checkout session', {
+            userId,
+            error: error.message,
+            stack: error.stack,
+        });
         throw new functions.https.HttpsError(
             'internal',
-            'Failed to create checkout session: ' + error.message
+            'Failed to create checkout session'
         );
     }
 });
@@ -86,7 +157,7 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
     try {
         event = stripe.webhooks.constructEvent(req.rawBody, sig, webhookSecret);
     } catch (err) {
-        console.error('Webhook signature verification failed:', err.message);
+        log('error', 'Webhook signature verification failed', { error: err.message });
         return res.status(400).send(`Webhook Error: ${err.message}`);
     }
 
@@ -97,15 +168,15 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
             break;
 
         case 'payment_intent.succeeded':
-            console.log('Payment intent succeeded:', event.data.object.id);
+            log('info', 'Payment intent succeeded', { paymentIntentId: event.data.object.id });
             break;
 
         case 'payment_intent.payment_failed':
-            console.log('Payment intent failed:', event.data.object.id);
+            log('warn', 'Payment intent failed', { paymentIntentId: event.data.object.id });
             break;
 
         default:
-            console.log(`Unhandled event type: ${event.type}`);
+            log('debug', 'Unhandled event type', { eventType: event.type });
     }
 
     res.json({ received: true });
@@ -113,34 +184,36 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
 
 /**
  * Handle successful checkout session
+ * Uses transaction to ensure atomic credit addition and prevent double-processing
  */
 async function handleCheckoutCompleted(session) {
-    console.log('Processing completed checkout session:', session.id);
+    log('info', 'Processing completed checkout session', { sessionId: session.id });
 
     const userId = session.metadata.userId || session.client_reference_id;
     const priceId = session.metadata.priceId;
     const credits = parseInt(session.metadata.credits);
 
     if (!userId || !credits) {
-        console.error('Missing userId or credits in session metadata:', session.metadata);
+        log('error', 'Missing userId or credits in session metadata', { metadata: session.metadata });
         return;
     }
 
     try {
-        // Check if this session was already processed
+        // Use Firestore transaction for atomic operation
+        // This prevents race conditions and double-processing
         const transactionRef = db.collection('transactions').doc(session.id);
-        const existingTransaction = await transactionRef.get();
-
-        if (existingTransaction.exists) {
-            console.log('Transaction already processed:', session.id);
-            return;
-        }
-
-        // Add credits to user account
         const userRef = db.collection('users').doc(userId);
-        await db.runTransaction(async (transaction) => {
-            const userDoc = await transaction.get(userRef);
 
+        await db.runTransaction(async (transaction) => {
+            // Check if transaction already exists (idempotency)
+            const existingTransaction = await transaction.get(transactionRef);
+            if (existingTransaction.exists) {
+                log('info', 'Transaction already processed', { sessionId: session.id });
+                return;
+            }
+
+            // Get user document
+            const userDoc = await transaction.get(userRef);
             if (!userDoc.exists) {
                 throw new Error('User not found');
             }
@@ -159,7 +232,7 @@ async function handleCheckoutCompleted(session) {
                 userId: userId,
                 type: 'purchase',
                 amount: credits,
-                price: session.amount_total / 100, // Convert from cents to dollars
+                price: session.amount_total / 100, // Convert from cents
                 currency: session.currency,
                 stripeSessionId: session.id,
                 stripePaymentIntent: session.payment_intent,
@@ -170,15 +243,24 @@ async function handleCheckoutCompleted(session) {
             });
         });
 
-        console.log(`Successfully added ${credits} credits to user ${userId}`);
+        log('info', 'Successfully added credits to user', {
+            userId,
+            credits,
+            sessionId: session.id,
+        });
     } catch (error) {
-        console.error('Error processing checkout completion:', error);
+        log('error', 'Error processing checkout completion', {
+            sessionId: session.id,
+            error: error.message,
+            stack: error.stack,
+        });
         throw error;
     }
 }
 
 /**
  * Get user's transaction history
+ * Cost-optimized with limit parameter
  */
 exports.getTransactions = functions.https.onCall(async (data, context) => {
     if (!context.auth) {
@@ -189,7 +271,9 @@ exports.getTransactions = functions.https.onCall(async (data, context) => {
     }
 
     const userId = context.auth.uid;
-    const limit = data.limit || 50;
+    const limit = Math.min(data.limit || 50, 100); // Cap at 100 to prevent excessive reads
+
+    log('info', 'Fetching transactions', { userId, limit });
 
     try {
         const transactionsSnapshot = await db
@@ -199,18 +283,20 @@ exports.getTransactions = functions.https.onCall(async (data, context) => {
             .limit(limit)
             .get();
 
-        const transactions = [];
-        transactionsSnapshot.forEach((doc) => {
-            transactions.push({
-                id: doc.id,
-                ...doc.data(),
-                createdAt: doc.data().createdAt?.toDate().toISOString(),
-            });
-        });
+        const transactions = transactionsSnapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+            createdAt: doc.data().createdAt?.toDate().toISOString(),
+        }));
+
+        log('info', 'Transactions fetched', { userId, count: transactions.length });
 
         return { transactions };
     } catch (error) {
-        console.error('Error fetching transactions:', error);
+        log('error', 'Error fetching transactions', {
+            userId,
+            error: error.message,
+        });
         throw new functions.https.HttpsError(
             'internal',
             'Failed to fetch transactions'
@@ -219,52 +305,136 @@ exports.getTransactions = functions.https.onCall(async (data, context) => {
 });
 
 /**
- * Firestore Trigger: Process APK when job is updated with inputFile
- * Automatically triggers backend processing when inputFile is added to job document
+ * Firestore Trigger: Process APK when job is created with inputFile
+ * Optimized to trigger only on document creation, not updates
+ * This reduces function invocations and costs
  */
 exports.processJob = functions.firestore
     .document('jobs/{jobId}')
-    .onUpdate(async (change, context) => {
+    .onCreate(async (snapshot, context) => {
         const jobId = context.params.jobId;
-        const beforeData = change.before.data();
-        const afterData = change.after.data();
+        const jobData = snapshot.data();
 
-        // Only trigger if inputFile was just added and status is still pending
-        if (!beforeData.inputFile && afterData.inputFile && afterData.status === 'pending') {
-            console.log(`[${jobId}] Job updated with inputFile, triggering backend processing`);
-        } else {
-            console.log(`[${jobId}] Job updated but not triggering (already has inputFile or not pending)`);
+        // Only process if inputFile is present and status is pending
+        if (!jobData.inputFile || jobData.status !== 'pending') {
+            log('debug', 'Job created but not ready for processing', {
+                jobId,
+                hasInputFile: !!jobData.inputFile,
+                status: jobData.status,
+            });
             return null;
         }
 
-        // Backend Cloud Run URL
-        const BACKEND_URL = 'https://dexprotector-processor-65sqz4zwra-uc.a.run.app';
-
-        // Call the backend processing service (fire-and-forget)
-        // Don't wait for response since processing can take minutes
-        const fetch = require('node-fetch');
-
-        fetch(`${BACKEND_URL}/process`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                jobId: jobId,
-                userId: afterData.userId,
-                inputFile: afterData.inputFile,
-                configXml: afterData.configXml,
-            }),
-        }).then(response => {
-            if (response.ok) {
-                console.log(`[${jobId}] Backend processing request sent successfully`);
-            } else {
-                console.error(`[${jobId}] Backend returned ${response.status}`);
-            }
-        }).catch(error => {
-            console.error(`[${jobId}] Error sending request to backend:`, error.message);
+        log('info', 'Job ready for processing', {
+            jobId,
+            userId: jobData.userId,
+            tier: jobData.configTier,
         });
 
-        console.log(`[${jobId}] Backend processing initiated (async)`);
+        // Call the backend processing service
+        // Using fire-and-forget pattern to avoid function timeout
+        const fetch = require('node-fetch');
+
+        try {
+            const response = await fetch(`${BACKEND_URL}/process`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    jobId: jobId,
+                    userId: jobData.userId,
+                    inputFile: jobData.inputFile,
+                    configXml: jobData.configXml,
+                }),
+                timeout: 5000, // 5 second timeout for request initiation
+            });
+
+            if (response.ok) {
+                log('info', 'Backend processing request sent successfully', { jobId });
+            } else {
+                const errorText = await response.text();
+                log('error', 'Backend returned error', {
+                    jobId,
+                    status: response.status,
+                    error: errorText,
+                });
+
+                // Update job status to failed
+                await snapshot.ref.update({
+                    status: 'failed',
+                    failedAt: admin.firestore.FieldValue.serverTimestamp(),
+                    error: 'Failed to initiate processing',
+                });
+            }
+        } catch (error) {
+            log('error', 'Error sending request to backend', {
+                jobId,
+                error: error.message,
+                stack: error.stack,
+            });
+
+            // Update job status to failed
+            try {
+                await snapshot.ref.update({
+                    status: 'failed',
+                    failedAt: admin.firestore.FieldValue.serverTimestamp(),
+                    error: 'Failed to connect to processing service',
+                });
+            } catch (updateError) {
+                log('error', 'Failed to update job status', {
+                    jobId,
+                    error: updateError.message,
+                });
+            }
+        }
+
         return { success: true, jobId };
+    });
+
+/**
+ * Scheduled function to clean up old jobs (run daily)
+ * Cost optimization: Remove old completed/failed jobs to reduce storage
+ */
+exports.cleanupOldJobs = functions.pubsub
+    .schedule('0 2 * * *') // Run at 2 AM daily
+    .timeZone('America/Los_Angeles')
+    .onRun(async (context) => {
+        log('info', 'Starting cleanup of old jobs');
+
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+        try {
+            // Find old completed/failed jobs
+            const oldJobsQuery = db
+                .collection('jobs')
+                .where('status', 'in', ['completed', 'failed'])
+                .where('createdAt', '<', thirtyDaysAgo)
+                .limit(500); // Process in batches to avoid timeout
+
+            const snapshot = await oldJobsQuery.get();
+
+            if (snapshot.empty) {
+                log('info', 'No old jobs to clean up');
+                return null;
+            }
+
+            // Batch delete for efficiency
+            const batch = db.batch();
+            snapshot.docs.forEach((doc) => {
+                batch.delete(doc.ref);
+            });
+
+            await batch.commit();
+
+            log('info', 'Old jobs cleaned up', { count: snapshot.size });
+        } catch (error) {
+            log('error', 'Error cleaning up old jobs', {
+                error: error.message,
+                stack: error.stack,
+            });
+        }
+
+        return null;
     });
