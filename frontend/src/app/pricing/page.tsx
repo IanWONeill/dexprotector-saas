@@ -197,8 +197,8 @@ export default function PricingPage() {
                             </div>
 
                             <ul className="space-y-3 mb-8">
-                                <PricingFeature text={`Up to ${pkg.credits} protected apps`} />
-                                <PricingFeature text="All protection tiers" />
+                                <PricingFeature text={`${pkg.credits} credits total`} />
+                                <PricingFeature text={pkg.savings ? `Save ${pkg.savings} vs Starter` : 'Best for trying 4tify'} />
                                 <PricingFeature text="Credits never expire" />
                             </ul>
 
